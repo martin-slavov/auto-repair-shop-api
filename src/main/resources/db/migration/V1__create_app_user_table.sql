@@ -9,4 +9,4 @@ CREATE TABLE app_user
     role          ENUM('CUSTOMER', 'MECHANIC','ADMIN') NOT NULL DEFAULT 'CUSTOMER',
     enabled       BOOLEAN      NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-)
+);

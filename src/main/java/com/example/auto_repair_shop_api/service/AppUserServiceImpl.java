@@ -33,8 +33,7 @@ public class AppUserServiceImpl implements AppUserService {
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
 
-        AppUser appUser = appUserRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
+        AppUser appUser = getByUsernameOrThrow(username);
 
         return new User(
                 appUser.getUsername(),
@@ -50,6 +49,12 @@ public class AppUserServiceImpl implements AppUserService {
     @Override
     public RegisterResponseDTO createMechanic(RegisterRequestDTO dto) {
         return createUserWithRole(dto, Role.MECHANIC);
+    }
+
+    @Override
+    public AppUser getByUsernameOrThrow(String username) {
+        return appUserRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
     }
 
     private RegisterResponseDTO createUserWithRole(RegisterRequestDTO dto, Role role) {

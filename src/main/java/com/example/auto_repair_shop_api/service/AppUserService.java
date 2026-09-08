@@ -14,4 +14,6 @@ public interface AppUserService extends UserDetailsService {
     RegisterResponseDTO registerCustomer(RegisterRequestDTO dto);
 
     RegisterResponseDTO createMechanic(RegisterRequestDTO dto);
+
+    AppUser getByUsernameOrThrow(String username);
 }

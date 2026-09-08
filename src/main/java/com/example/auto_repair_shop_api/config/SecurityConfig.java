@@ -39,6 +39,9 @@ public class SecurityConfig {
                                 .requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.POST, "/api/vehicles").hasRole("CUSTOMER")
+                                .requestMatchers(HttpMethod.POST, "/api/service-requests").hasRole("CUSTOMER")
+                                .requestMatchers(HttpMethod.PATCH, "/api/service-requests/{id}/approve").hasRole("ADMIN")
+                                .requestMatchers(HttpMethod.PATCH, "/api/service-requests/{id}/reject").hasRole("ADMIN")
                                 .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults());
 

@@ -7,7 +7,6 @@ import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -24,8 +23,7 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     public VehicleResponseDTO createVehicle(VehicleCreateDTO dto, String currentUsername) {
 
-        AppUser appUser = appUserService.findByUsername(currentUsername)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + currentUsername));
+        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
         if (vehicleRepository.existsByLicensePlate(dto.getLicensePlate())) {
             throw new IllegalArgumentException("Vehicle with this license plate already exists");
@@ -45,8 +43,8 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public List<VehicleResponseDTO> getVehiclesByCurrentUser(String currentUsername) {
-        AppUser appUser = appUserService.findByUsername(currentUsername)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + currentUsername));
+
+        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
         List<Vehicle> vehicles;
         if (appUser.getRole() == Role.ADMIN) {
@@ -62,8 +60,8 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public VehicleResponseDTO getVehicleById(Long id, String currentUsername) {
-        AppUser appUser = appUserService.findByUsername(currentUsername)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + currentUsername));
+
+        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
         Vehicle vehicle = vehicleRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Vehicle not found"));

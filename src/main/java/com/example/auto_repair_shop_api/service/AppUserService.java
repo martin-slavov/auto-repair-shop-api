@@ -10,5 +10,8 @@ import java.util.Optional;
 public interface AppUserService extends UserDetailsService {
 
     Optional<AppUser> findByUsername(String username);
+
     RegisterResponseDTO registerCustomer(RegisterRequestDTO dto);
+
+    RegisterResponseDTO createMechanic(RegisterRequestDTO dto);
 }

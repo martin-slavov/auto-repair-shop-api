@@ -44,7 +44,15 @@ public class AppUserServiceImpl implements AppUserService {
 
     @Override
     public RegisterResponseDTO registerCustomer(RegisterRequestDTO dto) {
+        return createUserWithRole(dto, Role.CUSTOMER);
+    }
 
+    @Override
+    public RegisterResponseDTO createMechanic(RegisterRequestDTO dto) {
+        return createUserWithRole(dto, Role.MECHANIC);
+    }
+
+    private RegisterResponseDTO createUserWithRole(RegisterRequestDTO dto, Role role) {
         if (appUserRepository.existsByUsername(dto.getUsername())) {
             throw new IllegalArgumentException("Username is already taken");
         }
@@ -58,7 +66,7 @@ public class AppUserServiceImpl implements AppUserService {
         appUser.setEmail(dto.getEmail());
         appUser.setFirstName(dto.getFirstName());
         appUser.setLastName(dto.getLastName());
-        appUser.setRole(Role.CUSTOMER);
+        appUser.setRole(role);
 
         AppUser savedUser = appUserRepository.save(appUser);
         return new RegisterResponseDTO(

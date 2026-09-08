@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -37,6 +38,7 @@ public class SecurityConfig {
                         configurer
                                 .requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                                .requestMatchers(HttpMethod.POST, "/api/vehicles").hasRole("CUSTOMER")
                                 .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults());
 

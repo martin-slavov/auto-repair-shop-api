@@ -7,11 +7,6 @@ import jakarta.validation.ConstraintValidatorContext;
 public class PasswordMatchValidator implements ConstraintValidator<PasswordMatch, RegisterRequestDTO> {
 
     @Override
-    public void initialize(PasswordMatch constraintAnnotation) {
-        ConstraintValidator.super.initialize(constraintAnnotation);
-    }
-
-    @Override
     public boolean isValid(RegisterRequestDTO value, ConstraintValidatorContext context) {
         if (value.getPassword() == null || value.getConfirmPassword() == null) {
             return true; // @NoBlank will handle it in the dto

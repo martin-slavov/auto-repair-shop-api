@@ -1,5 +1,6 @@
 package com.example.auto_repair_shop_api.controller;
 
+import com.example.auto_repair_shop_api.dto.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.ServiceRequestResponseDTO;
 import com.example.auto_repair_shop_api.service.ServiceRequestService;
@@ -38,9 +39,9 @@ public class ServiceRequestController {
     }
 
     @PatchMapping("/{id}/approve")
-    public ResponseEntity<ServiceRequestResponseDTO> approveServiceRequest(@PathVariable Long id) {
+    public ResponseEntity<ServiceRequestResponseDTO> approveServiceRequest(@PathVariable Long id, @RequestBody ApproveRequestDTO dto) {
 
-        ServiceRequestResponseDTO result = serviceRequestService.approveRequest(id);
+        ServiceRequestResponseDTO result = serviceRequestService.approveRequest(id, dto);
         return ResponseEntity.ok().body(result);
     }
 

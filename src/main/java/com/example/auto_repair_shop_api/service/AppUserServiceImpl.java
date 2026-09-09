@@ -57,6 +57,12 @@ public class AppUserServiceImpl implements AppUserService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found with username: " + username));
     }
 
+    @Override
+    public AppUser getByIdOrThrow(Long id) {
+        return appUserRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+    }
+
     private RegisterResponseDTO createUserWithRole(RegisterRequestDTO dto, Role role) {
         if (appUserRepository.existsByUsername(dto.getUsername())) {
             throw new IllegalArgumentException("Username is already taken");

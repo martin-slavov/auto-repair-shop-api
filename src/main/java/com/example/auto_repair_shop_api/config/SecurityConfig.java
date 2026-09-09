@@ -42,6 +42,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.POST, "/api/service-requests").hasRole("CUSTOMER")
                                 .requestMatchers(HttpMethod.PATCH, "/api/service-requests/{id}/approve").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.PATCH, "/api/service-requests/{id}/reject").hasRole("ADMIN")
+                                .requestMatchers("/api/service-visits/**").hasRole("MECHANIC")
                                 .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults());
 

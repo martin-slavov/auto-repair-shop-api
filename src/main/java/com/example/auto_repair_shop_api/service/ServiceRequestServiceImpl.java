@@ -1,5 +1,6 @@
 package com.example.auto_repair_shop_api.service;
 
+import com.example.auto_repair_shop_api.dto.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.ServiceRequestResponseDTO;
 import com.example.auto_repair_shop_api.model.AppUser;
@@ -25,6 +26,9 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
     @Autowired
     private AppUserService appUserService;
+
+    @Autowired
+    ServiceVisitService serviceVisitService;
 
     @Override
     public ServiceRequestResponseDTO createRequest(ServiceRequestCreateDTO dto, String currentUsername) {
@@ -66,16 +70,21 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     }
 
     @Override
-    public ServiceRequestResponseDTO approveRequest(Long requestId) {
-        return changeStatus(requestId, RequestStatus.APPROVED, "Only pending requests can be approved");
+    public ServiceRequestResponseDTO approveRequest(Long requestId, ApproveRequestDTO dto) {
+
+        ServiceRequest serviceRequest = changeStatus(requestId, RequestStatus.APPROVED, "Only pending requests can be approved");
+        serviceVisitService.createVisitFromRequest(serviceRequest, dto.mechanicId(), dto.scheduledDate());
+
+        return toResponseDto(serviceRequest);
     }
 
     @Override
     public ServiceRequestResponseDTO rejectRequest(Long requestId) {
-        return changeStatus(requestId, RequestStatus.REJECTED, "Only pending requests can be rejected");
+        ServiceRequest result = changeStatus(requestId, RequestStatus.REJECTED, "Only pending requests can be rejected");
+        return toResponseDto(result);
     }
 
-    private ServiceRequestResponseDTO changeStatus(Long requestId, RequestStatus status, String illegalStateMessage) {
+    private ServiceRequest changeStatus(Long requestId, RequestStatus status, String illegalStateMessage) {
 
         ServiceRequest serviceRequest = serviceRequestRepository.findById(requestId)
                 .orElseThrow(() -> new IllegalArgumentException("Service request not found with ID: " + requestId));
@@ -85,9 +94,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         }
 
         serviceRequest.setStatus(status);
-        ServiceRequest updatedRequest = serviceRequestRepository.save(serviceRequest);
-
-        return toResponseDto(updatedRequest);
+        return serviceRequestRepository.save(serviceRequest);
     }
 
     private ServiceRequestResponseDTO toResponseDto(ServiceRequest savedRequest) {

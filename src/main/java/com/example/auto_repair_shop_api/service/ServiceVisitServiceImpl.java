@@ -7,6 +7,7 @@ import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.ServiceVisit;
 import com.example.auto_repair_shop_api.model.VisitAssignment;
 import com.example.auto_repair_shop_api.model.enums.AssignmentRole;
+import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.model.enums.VisitStatus;
 import com.example.auto_repair_shop_api.repository.ServiceVisitRepository;
 import com.example.auto_repair_shop_api.repository.VisitAssignmentRepository;
@@ -32,6 +33,10 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     public ServiceVisitResponseDTO createVisitFromRequest(ServiceRequest serviceRequest, Long mechanicId, LocalDateTime scheduledDate) {
 
         AppUser mechanic = appUserService.getByIdOrThrow(mechanicId);
+
+        if (mechanic.getRole() != Role.MECHANIC) {
+            throw new IllegalArgumentException("User with ID " + mechanicId + " is not a mechanic");
+        }
 
         ServiceVisit serviceVisit = new ServiceVisit();
         serviceVisit.setStatus(VisitStatus.SCHEDULED);

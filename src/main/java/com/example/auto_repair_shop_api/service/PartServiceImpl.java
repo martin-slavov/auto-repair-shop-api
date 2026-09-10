@@ -9,6 +9,7 @@ import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.PartRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -22,6 +23,7 @@ public class PartServiceImpl implements PartService {
     private PartRepository partRepository;
 
     @Override
+    @Transactional
     public PartResponseDTO createPart(PartCreateDTO dto) {
 
         if (partRepository.existsBySerialNumber(dto.serialNumber())) {

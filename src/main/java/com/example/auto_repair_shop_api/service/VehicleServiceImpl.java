@@ -8,6 +8,7 @@ import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -21,6 +22,7 @@ public class VehicleServiceImpl implements VehicleService {
     private VehicleRepository vehicleRepository;
 
     @Override
+    @Transactional
     public VehicleResponseDTO createVehicle(VehicleCreateDTO dto, String currentUsername) {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);

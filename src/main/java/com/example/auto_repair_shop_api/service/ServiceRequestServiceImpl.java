@@ -32,6 +32,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     ServiceVisitService serviceVisitService;
 
     @Override
+    @Transactional
     public ServiceRequestResponseDTO createRequest(ServiceRequestCreateDTO dto, String currentUsername) {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
@@ -81,6 +82,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     }
 
     @Override
+    @Transactional
     public ServiceRequestResponseDTO rejectRequest(Long requestId) {
         ServiceRequest result = changeStatus(requestId, RequestStatus.REJECTED, "Only pending requests can be rejected");
         return toResponseDto(result);

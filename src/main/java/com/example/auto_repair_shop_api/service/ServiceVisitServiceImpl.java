@@ -72,6 +72,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     }
 
     @Override
+    @Transactional
     public ServiceVisitResponseDTO updateVisitStatus(Long visitId, VisitStatus newStatus, String currentUsername) {
 
         AppUser mechanic = appUserService.getByUsernameOrThrow(currentUsername);
@@ -92,6 +93,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     }
 
     @Override
+    @Transactional
     public ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, String currentUsername) {
         AppUser mechanic = appUserService.getByUsernameOrThrow(currentUsername);
 

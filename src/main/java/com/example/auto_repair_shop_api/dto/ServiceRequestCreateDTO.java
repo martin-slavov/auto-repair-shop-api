@@ -5,11 +5,11 @@ import jakarta.validation.constraints.NotNull;
 
 public class ServiceRequestCreateDTO {
 
-    @NotBlank(message = "Description is required")
-    private String description;
-
     @NotNull(message = "Vehicle ID is required")
     private Long vehicleId;
+
+    @NotBlank(message = "Description is required")
+    private String description;
 
     public ServiceRequestCreateDTO() {
     }

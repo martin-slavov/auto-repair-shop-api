@@ -13,6 +13,7 @@ import com.example.auto_repair_shop_api.repository.ServiceVisitRepository;
 import com.example.auto_repair_shop_api.repository.VisitAssignmentRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,6 +31,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     private AppUserService appUserService;
 
     @Override
+    @Transactional
     public ServiceVisitResponseDTO createVisitFromRequest(ServiceRequest serviceRequest, Long mechanicId, LocalDateTime scheduledDate) {
 
         AppUser mechanic = appUserService.getByIdOrThrow(mechanicId);

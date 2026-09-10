@@ -12,6 +12,7 @@ import com.example.auto_repair_shop_api.repository.ServiceRequestRepository;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -70,6 +71,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     }
 
     @Override
+    @Transactional
     public ServiceRequestResponseDTO approveRequest(Long requestId, ApproveRequestDTO dto) {
 
         ServiceRequest serviceRequest = changeStatus(requestId, RequestStatus.APPROVED, "Only pending requests can be approved");

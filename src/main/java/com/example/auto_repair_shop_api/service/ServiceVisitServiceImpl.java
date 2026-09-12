@@ -94,7 +94,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
 
     @Override
     @Transactional
-    public ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, String currentUsername) {
+    public ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, double hoursWorked, String currentUsername) {
         AppUser mechanic = appUserService.getByUsernameOrThrow(currentUsername);
 
         ServiceVisit serviceVisit = serviceVisitRepository.findById(visitId).orElseThrow(() -> new IllegalArgumentException("Service visit not found with ID: " + visitId));
@@ -109,6 +109,9 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         serviceVisit.setStatus(VisitStatus.COMPLETED);
         serviceVisit.setTechnicalNotes(technicalNotes);
         serviceVisit.setCompletedDate(LocalDateTime.now());
+
+        assignment.setHoursWorked(hoursWorked);
+        visitAssignmentRepository.save(assignment);
 
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 

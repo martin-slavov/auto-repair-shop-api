@@ -43,9 +43,12 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.PATCH, "/api/service-requests/{id}/approve").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.PATCH, "/api/service-requests/{id}/reject").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.GET, "/api/service-visits/{id}/parts").hasAnyRole("ADMIN", "MECHANIC")
+                                .requestMatchers(HttpMethod.PATCH, "/api/service-visits/{id}/invoice").hasRole("ADMIN")
                                 .requestMatchers("/api/service-visits/**").hasRole("MECHANIC")
                                 .requestMatchers(HttpMethod.GET, "/api/parts").hasAnyRole("ADMIN", "MECHANIC")
                                 .requestMatchers(HttpMethod.POST, "/api/parts").hasRole("ADMIN")
+                                .requestMatchers(HttpMethod.PATCH, "/api/invoices/{id}/pay").hasRole("ADMIN")
+                                .requestMatchers(HttpMethod.GET, "/api/invoices").hasAnyRole("ADMIN", "CUSTOMER")
                                 .anyRequest().authenticated())
                 .httpBasic(Customizer.withDefaults());
 

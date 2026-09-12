@@ -15,5 +15,5 @@ public interface ServiceVisitService {
 
     ServiceVisitResponseDTO updateVisitStatus(Long visitId, VisitStatus newStatus, String currentUsername);
 
-    ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, String currentUsername);
+    ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, double hoursWorked, String currentUsername);
 }

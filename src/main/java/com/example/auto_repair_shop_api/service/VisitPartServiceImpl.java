@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.service;
 
 import com.example.auto_repair_shop_api.dto.VisitPartCreateDTO;
 import com.example.auto_repair_shop_api.dto.VisitPartResponseDTO;
+import com.example.auto_repair_shop_api.mapper.VisitPartMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.Part;
 import com.example.auto_repair_shop_api.model.VisitAssignment;
@@ -11,7 +12,6 @@ import com.example.auto_repair_shop_api.model.enums.VisitStatus;
 import com.example.auto_repair_shop_api.repository.PartRepository;
 import com.example.auto_repair_shop_api.repository.VisitAssignmentRepository;
 import com.example.auto_repair_shop_api.repository.VisitPartRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,17 +21,19 @@ import java.util.List;
 @Service
 public class VisitPartServiceImpl implements VisitPartService {
 
-    @Autowired
-    private VisitPartRepository visitPartRepository;
+    private final VisitPartRepository visitPartRepository;
+    private final AppUserService appUserService;
+    private final VisitAssignmentRepository visitAssignmentRepository;
+    private final PartRepository partRepository;
+    private final VisitPartMapper visitPartMapper;
 
-    @Autowired
-    private AppUserService appUserService;
-
-    @Autowired
-    private VisitAssignmentRepository visitAssignmentRepository;
-
-    @Autowired
-    private PartRepository partRepository;
+    public VisitPartServiceImpl(VisitPartRepository visitPartRepository, AppUserService appUserService, VisitAssignmentRepository visitAssignmentRepository, PartRepository partRepository, VisitPartMapper visitPartMapper) {
+        this.visitPartRepository = visitPartRepository;
+        this.appUserService = appUserService;
+        this.visitAssignmentRepository = visitAssignmentRepository;
+        this.partRepository = partRepository;
+        this.visitPartMapper = visitPartMapper;
+    }
 
     @Override
     @Transactional
@@ -39,8 +41,7 @@ public class VisitPartServiceImpl implements VisitPartService {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
-        VisitAssignment assignment = visitAssignmentRepository.findByServiceVisitIdAndMechanicId(visitId, appUser.getId())
-                .orElseThrow(() -> new SecurityException("You are not assigned to this visit"));
+        VisitAssignment assignment = getAssignmentOrThrow(visitId, appUser.getId());
 
         if (assignment.getServiceVisit().getStatus() != VisitStatus.IN_PROGRESS) {
             throw new IllegalStateException("Parts can only be added while the visit is in progress");
@@ -56,7 +57,7 @@ public class VisitPartServiceImpl implements VisitPartService {
 
         VisitPart savedPart = visitPartRepository.save(visitPart);
 
-        return toResponseDto(savedPart);
+        return visitPartMapper.toResponseDto(savedPart);
     }
 
     @Override
@@ -65,23 +66,18 @@ public class VisitPartServiceImpl implements VisitPartService {
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
         if (appUser.getRole() == Role.MECHANIC) {
-            visitAssignmentRepository.findByServiceVisitIdAndMechanicId(visitId, appUser.getId())
-                    .orElseThrow(() -> new SecurityException("You are not assigned to this visit"));
+            getAssignmentOrThrow(visitId, appUser.getId());
         }
 
         List<VisitPart> parts = visitPartRepository.findByServiceVisitId(visitId);
 
         return parts.stream()
-                .map(this::toResponseDto)
+                .map(visitPartMapper::toResponseDto)
                 .toList();
     }
 
-    private VisitPartResponseDTO toResponseDto(VisitPart visitPart) {
-        return new VisitPartResponseDTO(
-                visitPart.getId(),
-                visitPart.getPart().getName(),
-                visitPart.getQuantity(),
-                visitPart.getPriceAtTimeOfUse()
-        );
+    private VisitAssignment getAssignmentOrThrow(Long visitId, Long mechanicId) {
+        return visitAssignmentRepository.findByServiceVisitIdAndMechanicId(visitId, mechanicId)
+                .orElseThrow(() -> new SecurityException("You are not assigned to this visit"));
     }
 }

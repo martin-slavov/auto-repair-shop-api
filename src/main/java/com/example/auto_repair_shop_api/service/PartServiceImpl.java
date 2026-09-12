@@ -1,8 +1,8 @@
 package com.example.auto_repair_shop_api.service;
 
-import com.example.auto_repair_shop_api.dto.PartCatalogDTO;
 import com.example.auto_repair_shop_api.dto.PartCreateDTO;
 import com.example.auto_repair_shop_api.dto.PartResponseDTO;
+import com.example.auto_repair_shop_api.mapper.PartMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.Part;
 import com.example.auto_repair_shop_api.model.enums.Role;
@@ -16,11 +16,16 @@ import java.util.List;
 @Service
 public class PartServiceImpl implements PartService {
 
-    @Autowired
-    private AppUserService appUserService;
+    private final AppUserService appUserService;
+    private final PartRepository partRepository;
+    private final PartMapper partMapper;
 
     @Autowired
-    private PartRepository partRepository;
+    public PartServiceImpl(AppUserService appUserService, PartRepository partRepository, PartMapper partMapper) {
+        this.appUserService = appUserService;
+        this.partRepository = partRepository;
+        this.partMapper = partMapper;
+    }
 
     @Override
     @Transactional
@@ -38,7 +43,7 @@ public class PartServiceImpl implements PartService {
 
         Part createdPart = partRepository.save(part);
 
-        return toResponseDto(createdPart);
+        return partMapper.toResponseDto(createdPart);
     }
 
     @Override
@@ -50,30 +55,12 @@ public class PartServiceImpl implements PartService {
 
         if (appUser.getRole() == Role.ADMIN) {
             return parts.stream()
-                    .map(this::toResponseDto)
+                    .map(partMapper::toResponseDto)
                     .toList();
         }
 
         return parts.stream()
-                .map(this::toCatalogDto)
+                .map(partMapper::toCatalogDto)
                 .toList();
-    }
-
-    private PartResponseDTO toResponseDto(Part part) {
-        return new PartResponseDTO(
-                part.getId(),
-                part.getName(),
-                part.getSerialNumber(),
-                part.getUnitCost(),
-                part.getUnitSellPrice()
-        );
-    }
-
-    private PartCatalogDTO toCatalogDto(Part part) {
-        return new PartCatalogDTO(
-                part.getId(),
-                part.getName(),
-                part.getUnitSellPrice()
-        );
     }
 }

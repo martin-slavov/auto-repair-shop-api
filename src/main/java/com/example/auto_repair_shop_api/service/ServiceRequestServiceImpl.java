@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service;
 import com.example.auto_repair_shop_api.dto.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.mapper.ServiceRequestMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.Vehicle;
@@ -19,17 +20,21 @@ import java.util.List;
 @Service
 public class ServiceRequestServiceImpl implements ServiceRequestService {
 
-    @Autowired
-    private ServiceRequestRepository serviceRequestRepository;
+
+    private final ServiceRequestRepository serviceRequestRepository;
+    private final VehicleRepository vehicleRepository;
+    private final AppUserService appUserService;
+    private final ServiceVisitService serviceVisitService;
+    private final ServiceRequestMapper serviceRequestMapper;
 
     @Autowired
-    private VehicleRepository vehicleRepository;
-
-    @Autowired
-    private AppUserService appUserService;
-
-    @Autowired
-    ServiceVisitService serviceVisitService;
+    public ServiceRequestServiceImpl(ServiceRequestRepository serviceRequestRepository, VehicleRepository vehicleRepository, AppUserService appUserService, ServiceVisitService serviceVisitService, ServiceRequestMapper serviceRequestMapper) {
+        this.serviceRequestRepository = serviceRequestRepository;
+        this.vehicleRepository = vehicleRepository;
+        this.appUserService = appUserService;
+        this.serviceVisitService = serviceVisitService;
+        this.serviceRequestMapper = serviceRequestMapper;
+    }
 
     @Override
     @Transactional
@@ -51,7 +56,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
         ServiceRequest savedRequest = serviceRequestRepository.save(serviceRequest);
 
-        return toResponseDto(savedRequest);
+        return serviceRequestMapper.toResponseDto(savedRequest);
     }
 
     @Override
@@ -67,7 +72,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         }
 
         return requests.stream()
-                .map(this::toResponseDto)
+                .map(serviceRequestMapper::toResponseDto)
                 .toList();
     }
 
@@ -78,14 +83,14 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         ServiceRequest serviceRequest = changeStatus(requestId, RequestStatus.APPROVED, "Only pending requests can be approved");
         serviceVisitService.createVisitFromRequest(serviceRequest, dto.mechanicId(), dto.scheduledDate());
 
-        return toResponseDto(serviceRequest);
+        return serviceRequestMapper.toResponseDto(serviceRequest);
     }
 
     @Override
     @Transactional
     public ServiceRequestResponseDTO rejectRequest(Long requestId) {
         ServiceRequest result = changeStatus(requestId, RequestStatus.REJECTED, "Only pending requests can be rejected");
-        return toResponseDto(result);
+        return serviceRequestMapper.toResponseDto(result);
     }
 
     private ServiceRequest changeStatus(Long requestId, RequestStatus status, String illegalStateMessage) {
@@ -99,15 +104,5 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
         serviceRequest.setStatus(status);
         return serviceRequestRepository.save(serviceRequest);
-    }
-
-    private ServiceRequestResponseDTO toResponseDto(ServiceRequest savedRequest) {
-        return new ServiceRequestResponseDTO(
-                savedRequest.getId(),
-                savedRequest.getDescription(),
-                savedRequest.getStatus().name(),
-                savedRequest.getCreatedAt(),
-                savedRequest.getVehicle().getLicensePlate()
-        );
     }
 }

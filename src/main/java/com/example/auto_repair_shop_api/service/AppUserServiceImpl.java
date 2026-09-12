@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.service;
 
 import com.example.auto_repair_shop_api.dto.RegisterRequestDTO;
 import com.example.auto_repair_shop_api.dto.RegisterResponseDTO;
+import com.example.auto_repair_shop_api.mapper.AppUserMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.AppUserRepository;
@@ -20,11 +21,16 @@ import java.util.Optional;
 @Service
 public class AppUserServiceImpl implements AppUserService {
 
-    @Autowired
-    private AppUserRepository appUserRepository;
+    private final AppUserRepository appUserRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final AppUserMapper appUserMapper;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    public AppUserServiceImpl(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder, AppUserMapper appUserMapper) {
+        this.appUserRepository = appUserRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.appUserMapper = appUserMapper;
+    }
 
     @Override
     public Optional<AppUser> findByUsername(String username) {
@@ -83,11 +89,6 @@ public class AppUserServiceImpl implements AppUserService {
         appUser.setRole(role);
 
         AppUser savedUser = appUserRepository.save(appUser);
-        return new RegisterResponseDTO(
-                savedUser.getId(),
-                savedUser.getUsername(),
-                savedUser.getEmail(),
-                savedUser.getRole()
-        );
+        return appUserMapper.toResponseDto(savedUser);
     }
 }

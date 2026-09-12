@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.service;
 
 import com.example.auto_repair_shop_api.dto.VehicleCreateDTO;
 import com.example.auto_repair_shop_api.dto.VehicleResponseDTO;
+import com.example.auto_repair_shop_api.mapper.VehicleMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.enums.Role;
@@ -15,11 +16,16 @@ import java.util.List;
 @Service
 public class VehicleServiceImpl implements VehicleService {
 
-    @Autowired
-    private AppUserService appUserService;
+    private final AppUserService appUserService;
+    private final VehicleRepository vehicleRepository;
+    private final VehicleMapper vehicleMapper;
 
     @Autowired
-    private VehicleRepository vehicleRepository;
+    public VehicleServiceImpl(AppUserService appUserService, VehicleRepository vehicleRepository, VehicleMapper vehicleMapper) {
+        this.appUserService = appUserService;
+        this.vehicleRepository = vehicleRepository;
+        this.vehicleMapper = vehicleMapper;
+    }
 
     @Override
     @Transactional
@@ -40,7 +46,7 @@ public class VehicleServiceImpl implements VehicleService {
 
         Vehicle savedVehicle = vehicleRepository.save(vehicle);
 
-        return toResponseDto(savedVehicle);
+        return vehicleMapper.toResponseDto(savedVehicle);
     }
 
     @Override
@@ -56,7 +62,7 @@ public class VehicleServiceImpl implements VehicleService {
         }
 
         return vehicles.stream()
-                .map(this::toResponseDto)
+                .map(vehicleMapper::toResponseDto)
                 .toList();
     }
 
@@ -75,21 +81,6 @@ public class VehicleServiceImpl implements VehicleService {
             throw new SecurityException("You do not have permission to view this vehicle");
         }
 
-        return toResponseDto(vehicle);
-    }
-
-    private VehicleResponseDTO toResponseDto(Vehicle vehicle) {
-        AppUser owner = vehicle.getOwner();
-        String ownerName = owner.getFirstName() + " " + owner.getLastName();
-
-        return new VehicleResponseDTO(
-                vehicle.getId(),
-                vehicle.getLicensePlate(),
-                vehicle.getManufacturer(),
-                vehicle.getModel(),
-                vehicle.getYear(),
-                owner.getId(),
-                ownerName
-        );
+        return vehicleMapper.toResponseDto(vehicle);
     }
 }

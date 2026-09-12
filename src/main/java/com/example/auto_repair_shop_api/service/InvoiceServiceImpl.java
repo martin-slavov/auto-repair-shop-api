@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.service;
 
 import com.example.auto_repair_shop_api.dto.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.mapper.InvoiceMapper;
 import com.example.auto_repair_shop_api.model.*;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.model.enums.VisitStatus;
@@ -21,20 +22,22 @@ public class InvoiceServiceImpl implements InvoiceService {
 
     private static final BigDecimal HOURLY_RATE = BigDecimal.valueOf(30.00);
 
-    @Autowired
-    private AppUserService appUserService;
+    private final AppUserService appUserService;
+    private final InvoiceRepository invoiceRepository;
+    private final ServiceVisitRepository serviceVisitRepository;
+    private final VisitAssignmentRepository visitAssignmentRepository;
+    private final VisitPartRepository visitPartRepository;
+    private final InvoiceMapper invoiceMapper;
 
     @Autowired
-    private InvoiceRepository invoiceRepository;
-
-    @Autowired
-    private ServiceVisitRepository serviceVisitRepository;
-
-    @Autowired
-    private VisitAssignmentRepository visitAssignmentRepository;
-
-    @Autowired
-    private VisitPartRepository visitPartRepository;
+    public InvoiceServiceImpl(AppUserService appUserService, InvoiceRepository invoiceRepository, ServiceVisitRepository serviceVisitRepository, VisitAssignmentRepository visitAssignmentRepository, VisitPartRepository visitPartRepository, InvoiceMapper invoiceMapper) {
+        this.appUserService = appUserService;
+        this.invoiceRepository = invoiceRepository;
+        this.serviceVisitRepository = serviceVisitRepository;
+        this.visitAssignmentRepository = visitAssignmentRepository;
+        this.visitPartRepository = visitPartRepository;
+        this.invoiceMapper = invoiceMapper;
+    }
 
     @Override
     @Transactional
@@ -59,7 +62,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
 
-        return toResultDto(savedInvoice);
+        return invoiceMapper.toResponseDto(savedInvoice);
     }
 
     @Override
@@ -72,7 +75,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setPaid(true);
         invoiceRepository.save(invoice);
 
-        return toResultDto(invoice);
+        return invoiceMapper.toResponseDto(invoice);
     }
 
     @Override
@@ -82,30 +85,17 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         if (appUser.getRole() == Role.ADMIN) {
             return invoiceRepository.findAll().stream()
-                    .map(this::toResultDto).toList();
+                    .map(invoiceMapper::toResponseDto).toList();
         }
 
         return invoiceRepository.findByVisitVehicleOwnerId(appUser.getId()).stream()
-                .map(this::toResultDto)
+                .map(invoiceMapper::toResponseDto)
                 .toList();
     }
 
     private String generateInvoiceNumber() {
         long count = invoiceRepository.count() + 1;
         return "INV-" + LocalDate.now().getYear() + "-" + String.format("%05d", count);
-    }
-
-    private InvoiceResponseDTO toResultDto(Invoice savedInvoice) {
-        return new InvoiceResponseDTO(
-                savedInvoice.getId(),
-                savedInvoice.getInvoiceNumber(),
-                savedInvoice.getVisit().getVehicle().getLicensePlate(),
-                savedInvoice.getPartsPrice(),
-                savedInvoice.getLaborPrice(),
-                savedInvoice.getTotalPrice(),
-                savedInvoice.getIssuedDate(),
-                savedInvoice.isPaid()
-        );
     }
 
     private BigDecimal calculatePartsPrice(Long visitId) {

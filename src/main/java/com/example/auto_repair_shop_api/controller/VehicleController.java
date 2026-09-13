@@ -1,7 +1,7 @@
 package com.example.auto_repair_shop_api.controller;
 
-import com.example.auto_repair_shop_api.dto.VehicleCreateDTO;
-import com.example.auto_repair_shop_api.dto.VehicleResponseDTO;
+import com.example.auto_repair_shop_api.dto.vehicle.VehicleCreateDTO;
+import com.example.auto_repair_shop_api.dto.vehicle.VehicleResponseDTO;
 import com.example.auto_repair_shop_api.service.VehicleService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import jakarta.validation.Valid;

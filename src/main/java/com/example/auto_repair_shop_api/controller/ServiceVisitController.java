@@ -1,9 +1,9 @@
 package com.example.auto_repair_shop_api.controller;
 
-import com.example.auto_repair_shop_api.dto.CompleteVisitDTO;
-import com.example.auto_repair_shop_api.dto.InvoiceResponseDTO;
-import com.example.auto_repair_shop_api.dto.ServiceVisitResponseDTO;
-import com.example.auto_repair_shop_api.dto.UpdateVisitStatusDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.CompleteVisitDTO;
+import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.UpdateVisitStatusDTO;
 import com.example.auto_repair_shop_api.service.InvoiceService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;

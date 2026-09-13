@@ -1,5 +1,6 @@
 package com.example.auto_repair_shop_api.validation;
 
+import com.example.auto_repair_shop_api.validation.validator.PasswordMatchValidator;
 import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 

@@ -1,6 +1,6 @@
 package com.example.auto_repair_shop_api.controller;
 
-import com.example.auto_repair_shop_api.dto.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 import com.example.auto_repair_shop_api.service.InvoiceService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import org.springframework.http.ResponseEntity;

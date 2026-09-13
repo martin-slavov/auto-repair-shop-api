@@ -1,7 +1,7 @@
 package com.example.auto_repair_shop_api.service;
 
-import com.example.auto_repair_shop_api.dto.PartCreateDTO;
-import com.example.auto_repair_shop_api.dto.PartResponseDTO;
+import com.example.auto_repair_shop_api.dto.part.PartCreateDTO;
+import com.example.auto_repair_shop_api.dto.part.PartResponseDTO;
 
 import java.util.List;
 

@@ -1,6 +1,6 @@
 package com.example.auto_repair_shop_api.mapper;
 
-import com.example.auto_repair_shop_api.dto.VisitPartResponseDTO;
+import com.example.auto_repair_shop_api.dto.visitpart.VisitPartResponseDTO;
 import com.example.auto_repair_shop_api.model.VisitPart;
 import org.springframework.stereotype.Component;
 

@@ -1,8 +1,8 @@
 package com.example.auto_repair_shop_api.service;
 
-import com.example.auto_repair_shop_api.dto.ApproveRequestDTO;
-import com.example.auto_repair_shop_api.dto.ServiceRequestCreateDTO;
-import com.example.auto_repair_shop_api.dto.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
+import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
+import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
 
 import java.util.List;
 

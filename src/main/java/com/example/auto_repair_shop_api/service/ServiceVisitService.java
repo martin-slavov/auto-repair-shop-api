@@ -1,6 +1,6 @@
 package com.example.auto_repair_shop_api.service;
 
-import com.example.auto_repair_shop_api.dto.ServiceVisitResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.enums.VisitStatus;
 

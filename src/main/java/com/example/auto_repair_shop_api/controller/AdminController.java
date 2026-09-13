@@ -1,7 +1,7 @@
 package com.example.auto_repair_shop_api.controller;
 
-import com.example.auto_repair_shop_api.dto.RegisterRequestDTO;
-import com.example.auto_repair_shop_api.dto.RegisterResponseDTO;
+import com.example.auto_repair_shop_api.dto.auth.RegisterRequestDTO;
+import com.example.auto_repair_shop_api.dto.auth.RegisterResponseDTO;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

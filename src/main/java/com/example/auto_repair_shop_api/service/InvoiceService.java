@@ -1,6 +1,6 @@
 package com.example.auto_repair_shop_api.service;
 
-import com.example.auto_repair_shop_api.dto.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 
 import java.util.List;
 

@@ -76,19 +76,19 @@ public class AppUserServiceImpl implements AppUserService {
     }
 
     private RegisterResponseDTO createUserWithRole(RegisterRequestDTO dto, Role role) {
-        if (appUserRepository.existsByUsername(dto.getUsername())) {
+        if (appUserRepository.existsByUsername(dto.username())) {
             throw new DuplicateResourceException("Username is already taken");
         }
-        if (appUserRepository.existsByEmail(dto.getEmail())) {
+        if (appUserRepository.existsByEmail(dto.email())) {
             throw new DuplicateResourceException("Email is already in use");
         }
 
         AppUser appUser = new AppUser();
-        appUser.setUsername(dto.getUsername());
-        appUser.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
-        appUser.setEmail(dto.getEmail());
-        appUser.setFirstName(dto.getFirstName());
-        appUser.setLastName(dto.getLastName());
+        appUser.setUsername(dto.username());
+        appUser.setPasswordHash(passwordEncoder.encode(dto.password()));
+        appUser.setEmail(dto.email());
+        appUser.setFirstName(dto.firstName());
+        appUser.setLastName(dto.lastName());
         appUser.setRole(role);
 
         AppUser savedUser = appUserRepository.save(appUser);

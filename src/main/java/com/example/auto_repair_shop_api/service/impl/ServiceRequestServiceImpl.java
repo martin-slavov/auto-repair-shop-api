@@ -48,15 +48,15 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
-        Vehicle vehicle = vehicleRepository.findById(dto.getVehicleId())
-                .orElseThrow(() -> new ResourceNotFoundException("Vehicle not found with ID: " + dto.getVehicleId()));
+        Vehicle vehicle = vehicleRepository.findById(dto.vehicleId())
+                .orElseThrow(() -> new ResourceNotFoundException("Vehicle not found with ID: " + dto.vehicleId()));
 
         if (!vehicle.getOwner().getId().equals(appUser.getId())) {
             throw new OwnershipViolationException("You can only create service requests for your own vehicles");
         }
 
         ServiceRequest serviceRequest = new ServiceRequest();
-        serviceRequest.setDescription(dto.getDescription());
+        serviceRequest.setDescription(dto.description());
         serviceRequest.setStatus(RequestStatus.PENDING);
         serviceRequest.setVehicle(vehicle);
 

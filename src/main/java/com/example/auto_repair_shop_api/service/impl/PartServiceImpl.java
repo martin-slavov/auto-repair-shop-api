@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.dto.part.PartCreateDTO;
 import com.example.auto_repair_shop_api.dto.part.PartResponseDTO;
+import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.mapper.PartMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.Part;
@@ -34,7 +35,7 @@ public class PartServiceImpl implements PartService {
     public PartResponseDTO createPart(PartCreateDTO dto) {
 
         if (partRepository.existsBySerialNumber(dto.serialNumber())) {
-            throw new IllegalArgumentException("Part with this serial number already exists");
+            throw new DuplicateResourceException("Part with this serial number already exists");
         }
 
         Part part = new Part();

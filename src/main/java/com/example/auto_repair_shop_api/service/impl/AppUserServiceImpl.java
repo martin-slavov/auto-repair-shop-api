@@ -2,6 +2,8 @@ package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.dto.auth.RegisterRequestDTO;
 import com.example.auto_repair_shop_api.dto.auth.RegisterResponseDTO;
+import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
+import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.AppUserMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.enums.Role;
@@ -70,15 +72,15 @@ public class AppUserServiceImpl implements AppUserService {
     @Override
     public AppUser getByIdOrThrow(Long id) {
         return appUserRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + id));
     }
 
     private RegisterResponseDTO createUserWithRole(RegisterRequestDTO dto, Role role) {
         if (appUserRepository.existsByUsername(dto.getUsername())) {
-            throw new IllegalArgumentException("Username is already taken");
+            throw new DuplicateResourceException("Username is already taken");
         }
         if (appUserRepository.existsByEmail(dto.getEmail())) {
-            throw new IllegalArgumentException("Email is already in use");
+            throw new DuplicateResourceException("Email is already in use");
         }
 
         AppUser appUser = new AppUser();

@@ -1,6 +1,8 @@
 package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
+import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.InvoiceMapper;
 import com.example.auto_repair_shop_api.model.*;
 import com.example.auto_repair_shop_api.model.enums.Role;
@@ -45,10 +47,10 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public InvoiceResponseDTO createInvoice(Long visitId) {
 
-        ServiceVisit serviceVisit = serviceVisitRepository.findById(visitId).orElseThrow(() -> new IllegalArgumentException("Visit not found"));
+        ServiceVisit serviceVisit = serviceVisitRepository.findById(visitId).orElseThrow(() -> new ResourceNotFoundException("Visit not found"));
 
         if (serviceVisit.getStatus() != VisitStatus.COMPLETED) {
-            throw new IllegalArgumentException("Visit status must be COMPLETED");
+            throw new InvalidStateTransitionException("Visit status must be COMPLETED");
         }
 
         BigDecimal laborPrice = calculateLaborPrice(visitId);
@@ -72,7 +74,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     public InvoiceResponseDTO markAsPaid(Long invoiceId) {
 
         Invoice invoice = invoiceRepository.findById(invoiceId)
-                .orElseThrow(() -> new IllegalArgumentException("Invoice not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
 
         invoice.setPaid(true);
         invoiceRepository.save(invoice);

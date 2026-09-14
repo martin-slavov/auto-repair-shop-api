@@ -1,6 +1,8 @@
 package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
+import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
+import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.mapper.ServiceVisitMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
@@ -85,7 +87,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         ServiceVisit serviceVisit = assignment.getServiceVisit();
 
         if (serviceVisit.getStatus() != VisitStatus.SCHEDULED || newStatus != VisitStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Invalid status transition");
+            throw new InvalidStateTransitionException("Invalid status transition");
         }
 
         serviceVisit.setStatus(newStatus);
@@ -102,7 +104,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         ServiceVisit serviceVisit = assignment.getServiceVisit();
 
         if (serviceVisit.getStatus() != VisitStatus.IN_PROGRESS || !assignment.getRoleInVisit().equals(AssignmentRole.LEAD)) {
-            throw new IllegalStateException("Only the lead mechanic can complete a visit that is in progress");
+            throw new InvalidStateTransitionException("Only the lead mechanic can complete a visit that is in progress");
         }
 
         serviceVisit.setStatus(VisitStatus.COMPLETED);
@@ -120,6 +122,6 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     private VisitAssignment getMechanicAssignmentOrThrow(Long visitId, String currentUsername) {
         AppUser mechanic = appUserService.getByUsernameOrThrow(currentUsername);
         return visitAssignmentRepository.findByServiceVisitIdAndMechanicId(visitId, mechanic.getId())
-                .orElseThrow(() -> new IllegalArgumentException("Mechanic is not assigned to this service visit"));
+                .orElseThrow(() -> new OwnershipViolationException("Mechanic is not assigned to this service visit"));
     }
 }

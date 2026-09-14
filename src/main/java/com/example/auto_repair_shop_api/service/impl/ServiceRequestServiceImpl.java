@@ -3,6 +3,9 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
+import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
+import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.ServiceRequestMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
@@ -46,10 +49,10 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
         Vehicle vehicle = vehicleRepository.findById(dto.getVehicleId())
-                .orElseThrow(() -> new IllegalArgumentException("Vehicle not found with ID: " + dto.getVehicleId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Vehicle not found with ID: " + dto.getVehicleId()));
 
         if (!vehicle.getOwner().getId().equals(appUser.getId())) {
-            throw new IllegalArgumentException("You can only create service requests for your own vehicles");
+            throw new OwnershipViolationException("You can only create service requests for your own vehicles");
         }
 
         ServiceRequest serviceRequest = new ServiceRequest();
@@ -99,10 +102,10 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     private ServiceRequest changeStatus(Long requestId, RequestStatus status, String illegalStateMessage) {
 
         ServiceRequest serviceRequest = serviceRequestRepository.findById(requestId)
-                .orElseThrow(() -> new IllegalArgumentException("Service request not found with ID: " + requestId));
+                .orElseThrow(() -> new ResourceNotFoundException("Service request not found with ID: " + requestId));
 
         if (serviceRequest.getStatus() != RequestStatus.PENDING) {
-            throw new IllegalStateException(illegalStateMessage);
+            throw new InvalidStateTransitionException(illegalStateMessage);
         }
 
         serviceRequest.setStatus(status);

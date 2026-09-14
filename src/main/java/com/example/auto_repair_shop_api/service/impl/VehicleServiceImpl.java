@@ -1,88 +1,68 @@
-package com.example.auto_repair_shop_api.service.impl;
-
-import com.example.auto_repair_shop_api.dto.vehicle.VehicleCreateDTO;
-import com.example.auto_repair_shop_api.dto.vehicle.VehicleResponseDTO;
-import com.example.auto_repair_shop_api.mapper.VehicleMapper;
-import com.example.auto_repair_shop_api.model.AppUser;
-import com.example.auto_repair_shop_api.model.Vehicle;
-import com.example.auto_repair_shop_api.model.enums.Role;
-import com.example.auto_repair_shop_api.repository.VehicleRepository;
-import com.example.auto_repair_shop_api.service.AppUserService;
-import com.example.auto_repair_shop_api.service.VehicleService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-
-@Service
-public class VehicleServiceImpl implements VehicleService {
-
-    private final AppUserService appUserService;
-    private final VehicleRepository vehicleRepository;
-    private final VehicleMapper vehicleMapper;
-
-    @Autowired
-    public VehicleServiceImpl(AppUserService appUserService, VehicleRepository vehicleRepository, VehicleMapper vehicleMapper) {
-        this.appUserService = appUserService;
-        this.vehicleRepository = vehicleRepository;
-        this.vehicleMapper = vehicleMapper;
-    }
-
-    @Override
-    @Transactional
-    public VehicleResponseDTO createVehicle(VehicleCreateDTO dto, String currentUsername) {
-
-        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
-
-        if (vehicleRepository.existsByLicensePlate(dto.getLicensePlate())) {
-            throw new IllegalArgumentException("Vehicle with this license plate already exists");
-        }
-
-        Vehicle vehicle = new Vehicle();
-        vehicle.setLicensePlate(dto.getLicensePlate());
-        vehicle.setManufacturer(dto.getManufacturer());
-        vehicle.setModel(dto.getModel());
-        vehicle.setYear(dto.getYear());
-        vehicle.setOwner(appUser);
-
-        Vehicle savedVehicle = vehicleRepository.save(vehicle);
-
-        return vehicleMapper.toResponseDto(savedVehicle);
-    }
-
-    @Override
-    public List<VehicleResponseDTO> getVehiclesByCurrentUser(String currentUsername) {
-
-        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
-
-        List<Vehicle> vehicles;
-        if (appUser.getRole() == Role.ADMIN) {
-            vehicles = vehicleRepository.findAll();
-        } else {
-            vehicles = vehicleRepository.findByOwnerId(appUser.getId());
-        }
-
-        return vehicles.stream()
-                .map(vehicleMapper::toResponseDto)
-                .toList();
-    }
-
-    @Override
-    public VehicleResponseDTO getVehicleById(Long id, String currentUsername) {
-
-        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
-
-        Vehicle vehicle = vehicleRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Vehicle not found"));
-
-        boolean isOwner = vehicle.getOwner().getId().equals(appUser.getId());
-        boolean isAdmin = appUser.getRole() == Role.ADMIN;
-
-        if (!isOwner && !isAdmin) {
-            throw new SecurityException("You do not have permission to view this vehicle");
-        }
-
-        return vehicleMapper.toResponseDto(vehicle);
-    }
-}
+    u'\u203a'   #  0x9B -> SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+    u'\ufffe'   #  0x9C -> UNDEFINED
+    u'\xaf'     #  0x9D -> MACRON
+    u'\u02db'   #  0x9E -> OGONEK
+    u'\ufffe'   #  0x9F -> UNDEFINED
+    u'\xa0'     #  0xA0 -> NO-BREAK SPACE
+    u'\ufffe'   #  0xA1 -> UNDEFINED
+    u'\xa2'     #  0xA2 -> CENT SIGN
+    u'\xa3'     #  0xA3 -> POUND SIGN
+    u'\xa4'     #  0xA4 -> CURRENCY SIGN
+    u'\ufffe'   #  0xA5 -> UNDEFINED
+    u'\xa6'     #  0xA6 -> BROKEN BAR
+    u'\xa7'     #  0xA7 -> SECTION SIGN
+    u'\xd8'     #  0xA8 -> LATIN CAPITAL LETTER O WITH STROKE
+    u'\xa9'     #  0xA9 -> COPYRIGHT SIGN
+    u'\u0156'   #  0xAA -> LATIN CAPITAL LETTER R WITH CEDILLA
+    u'\xab'     #  0xAB -> LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+    u'\xac'     #  0xAC -> NOT SIGN
+    u'\xad'     #  0xAD -> SOFT HYPHEN
+    u'\xae'     #  0xAE -> REGISTERED SIGN
+    u'\xc6'     #  0xAF -> LATIN CAPITAL LETTER AE
+    u'\xb0'     #  0xB0 -> DEGREE SIGN
+    u'\xb1'     #  0xB1 -> PLUS-MINUS SIGN
+    u'\xb2'     #  0xB2 -> SUPERSCRIPT TWO
+    u'\xb3'     #  0xB3 -> SUPERSCRIPT THREE
+    u'\xb4'     #  0xB4 -> ACUTE ACCENT
+    u'\xb5'     #  0xB5 -> MICRO SIGN
+    u'\xb6'     #  0xB6 -> PILCROW SIGN
+    u'\xb7'     #  0xB7 -> MIDDLE DOT
+    u'\xf8'     #  0xB8 -> LATIN SMALL LETTER O WITH STROKE
+    u'\xb9'     #  0xB9 -> SUPERSCRIPT ONE
+    u'\u0157'   #  0xBA -> LATIN SMALL LETTER R WITH CEDILLA
+    u'\xbb'     #  0xBB -> RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+    u'\xbc'     #  0xBC -> VULGAR FRACTION ONE QUARTER
+    u'\xbd'     #  0xBD -> VULGAR FRACTION ONE HALF
+    u'\xbe'     #  0xBE -> VULGAR FRACTION THREE QUARTERS
+    u'\xe6'     #  0xBF -> LATIN SMALL LETTER AE
+    u'\u0104'   #  0xC0 -> LATIN CAPITAL LETTER A WITH OGONEK
+    u'\u012e'   #  0xC1 -> LATIN CAPITAL LETTER I WITH OGONEK
+    u'\u0100'   #  0xC2 -> LATIN CAPITAL LETTER A WITH MACRON
+    u'\u0106'   #  0xC3 -> LATIN CAPITAL LETTER C WITH ACUTE
+    u'\xc4'     #  0xC4 -> LATIN CAPITAL LETTER A WITH DIAERESIS
+    u'\xc5'     #  0xC5 -> LATIN CAPITAL LETTER A WITH RING ABOVE
+    u'\u0118'   #  0xC6 -> LATIN CAPITAL LETTER E WITH OGONEK
+    u'\u0112'   #  0xC7 -> LATIN CAPITAL LETTER E WITH MACRON
+    u'\u010c'   #  0xC8 -> LATIN CAPITAL LETTER C WITH CARON
+    u'\xc9'     #  0xC9 -> LATIN CAPITAL LETTER E WITH ACUTE
+    u'\u0179'   #  0xCA -> LATIN CAPITAL LETTER Z WITH ACUTE
+    u'\u0116'   #  0xCB -> LATIN CAPITAL LETTER E WITH DOT ABOVE
+    u'\u0122'   #  0xCC -> LATIN CAPITAL LETTER G WITH CEDILLA
+    u'\u0136'   #  0xCD -> LATIN CAPITAL LETTER K WITH CEDILLA
+    u'\u012a'   #  0xCE -> LATIN CAPITAL LETTER I WITH MACRON
+    u'\u013b'   #  0xCF -> LATIN CAPITAL LETTER L WITH CEDILLA
+    u'\u0160'   #  0xD0 -> LATIN CAPITAL LETTER S WITH CARON
+    u'\u0143'   #  0xD1 -> LATIN CAPITAL LETTER N WITH ACUTE
+    u'\u0145'   #  0xD2 -> LATIN CAPITAL LETTER N WITH CEDILLA
+    u'\xd3'     #  0xD3 -> LATIN CAPITAL LETTER O WITH ACUTE
+    u'\u014c'   #  0xD4 -> LATIN CAPITAL LETTER O WITH MACRON
+    u'\xd5'     #  0xD5 -> LATIN CAPITAL LETTER O WITH TILDE
+    u'\xd6'     #  0xD6 -> LATIN CAPITAL LETTER O WITH DIAERESIS
+    u'\xd7'     #  0xD7 -> MULTIPLICATION SIGN
+    u'\u0172'   #  0xD8 -> LATIN CAPITAL LETTER U WITH OGONEK
+    u'\u0141'   #  0xD9 -> LATIN CAPITAL LETTER L WITH STROKE
+    u'\u015a'   #  0xDA -> LATIN CAPITAL LETTER S WITH ACUTE
+    u'\u016a'   #  0xDB -> LATIN CAPITAL LETTER U WITH MACRON
+    u'\xdc'     #  0xDC -> LATIN CAPITAL LETTER U WITH DIAERESIS
+    u'\u017b'   #  0xDD -> LATIN CAPITAL LETTER Z WITH DOT ABOVE
+    u'\u017d'   #  0xDE -> LATIN CAPIT

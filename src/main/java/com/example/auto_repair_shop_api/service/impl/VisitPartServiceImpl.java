@@ -2,6 +2,9 @@ package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.dto.visitpart.VisitPartCreateDTO;
 import com.example.auto_repair_shop_api.dto.visitpart.VisitPartResponseDTO;
+import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
+import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
+import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.VisitPartMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.Part;
@@ -46,10 +49,10 @@ public class VisitPartServiceImpl implements VisitPartService {
         VisitAssignment assignment = getAssignmentOrThrow(visitId, appUser.getId());
 
         if (assignment.getServiceVisit().getStatus() != VisitStatus.IN_PROGRESS) {
-            throw new IllegalStateException("Parts can only be added while the visit is in progress");
+            throw new InvalidStateTransitionException("Parts can only be added while the visit is in progress");
         }
 
-        Part part = partRepository.findById(dto.partId()).orElseThrow(() -> new IllegalArgumentException("Part not found"));
+        Part part = partRepository.findById(dto.partId()).orElseThrow(() -> new ResourceNotFoundException("Part not found"));
 
         VisitPart visitPart = new VisitPart();
         visitPart.setServiceVisit(assignment.getServiceVisit());
@@ -80,6 +83,6 @@ public class VisitPartServiceImpl implements VisitPartService {
 
     private VisitAssignment getAssignmentOrThrow(Long visitId, Long mechanicId) {
         return visitAssignmentRepository.findByServiceVisitIdAndMechanicId(visitId, mechanicId)
-                .orElseThrow(() -> new SecurityException("You are not assigned to this visit"));
+                .orElseThrow(() -> new OwnershipViolationException("You are not assigned to this visit"));
     }
 }

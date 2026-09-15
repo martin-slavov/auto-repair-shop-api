@@ -12,3 +12,10 @@ spring.flyway.enabled=true
 # Generate with: openssl rand -base64 32
 jwt.secret=your_base64_encoded_secret_key_here_min_32_bytes
 jwt.expiration=86400000
+
+spring.mail.host=sandbox.smtp.mailtrap.io
+spring.mail.port=2525
+spring.mail.username=your_mailtrap_username
+spring.mail.password=your_mailtrap_password
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true

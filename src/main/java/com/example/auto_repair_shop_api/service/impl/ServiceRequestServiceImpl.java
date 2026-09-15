@@ -15,6 +15,7 @@ import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.ServiceRequestRepository;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import com.example.auto_repair_shop_api.service.AppUserService;
+import com.example.auto_repair_shop_api.service.EmailService;
 import com.example.auto_repair_shop_api.service.ServiceRequestService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,14 +33,16 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     private final AppUserService appUserService;
     private final ServiceVisitService serviceVisitService;
     private final ServiceRequestMapper serviceRequestMapper;
+    private final EmailService emailService;
 
     @Autowired
-    public ServiceRequestServiceImpl(ServiceRequestRepository serviceRequestRepository, VehicleRepository vehicleRepository, AppUserService appUserService, ServiceVisitService serviceVisitService, ServiceRequestMapper serviceRequestMapper) {
+    public ServiceRequestServiceImpl(ServiceRequestRepository serviceRequestRepository, VehicleRepository vehicleRepository, AppUserService appUserService, ServiceVisitService serviceVisitService, ServiceRequestMapper serviceRequestMapper, EmailService emailService) {
         this.serviceRequestRepository = serviceRequestRepository;
         this.vehicleRepository = vehicleRepository;
         this.appUserService = appUserService;
         this.serviceVisitService = serviceVisitService;
         this.serviceRequestMapper = serviceRequestMapper;
+        this.emailService = emailService;
     }
 
     @Override
@@ -61,6 +64,8 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         serviceRequest.setVehicle(vehicle);
 
         ServiceRequest savedRequest = serviceRequestRepository.save(serviceRequest);
+
+        emailService.sendServiceRequestNotification(vehicle.getLicensePlate(), dto.description());
 
         return serviceRequestMapper.toResponseDto(savedRequest);
     }

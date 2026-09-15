@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class AppUserServiceImpl implements AppUserService {
@@ -33,11 +32,6 @@ public class AppUserServiceImpl implements AppUserService {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.appUserMapper = appUserMapper;
-    }
-
-    @Override
-    public Optional<AppUser> findByUsername(String username) {
-        return appUserRepository.findByUsername(username);
     }
 
     @Override

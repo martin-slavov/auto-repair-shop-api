@@ -4,6 +4,8 @@ import com.example.auto_repair_shop_api.dto.visitpart.VisitPartCreateDTO;
 import com.example.auto_repair_shop_api.dto.visitpart.VisitPartResponseDTO;
 import com.example.auto_repair_shop_api.service.VisitPartService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "Visit Parts", description = "Track parts used during a service visit")
 @RestController
 @RequestMapping("/api/service-visits/{id}/parts")
 public class VisitPartController {
@@ -21,6 +24,7 @@ public class VisitPartController {
         this.visitPartService = visitPartService;
     }
 
+    @Operation(summary = "Add a part to a visit (assigned mechanic only, visit must be in progress)")
     @PostMapping
     public ResponseEntity<VisitPartResponseDTO> addPartToVisit(@PathVariable Long id, @Valid @RequestBody VisitPartCreateDTO visitPartCreateDTO) {
 
@@ -30,6 +34,7 @@ public class VisitPartController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
+    @Operation(summary = "Get all parts used in a visit")
     @GetMapping
     public ResponseEntity<List<VisitPartResponseDTO>> getPartsForVisit(@PathVariable Long id) {
 

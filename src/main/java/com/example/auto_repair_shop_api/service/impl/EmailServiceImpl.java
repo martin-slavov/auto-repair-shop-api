@@ -3,7 +3,6 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.service.EmailService;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -16,7 +15,6 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Override
-    @Async
     public void sendServiceRequestNotification(String vehicleLicensePlate, String description) {
 
         SimpleMailMessage message = new SimpleMailMessage();

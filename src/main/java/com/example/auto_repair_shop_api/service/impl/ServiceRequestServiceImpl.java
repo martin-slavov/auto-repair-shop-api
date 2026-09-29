@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.event.ServiceRequestCreatedEvent;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
@@ -15,10 +16,9 @@ import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.ServiceRequestRepository;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import com.example.auto_repair_shop_api.service.AppUserService;
-import com.example.auto_repair_shop_api.service.EmailService;
 import com.example.auto_repair_shop_api.service.ServiceRequestService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,22 +27,25 @@ import java.util.List;
 @Service
 public class ServiceRequestServiceImpl implements ServiceRequestService {
 
-
     private final ServiceRequestRepository serviceRequestRepository;
     private final VehicleRepository vehicleRepository;
     private final AppUserService appUserService;
     private final ServiceVisitService serviceVisitService;
     private final ServiceRequestMapper serviceRequestMapper;
-    private final EmailService emailService;
+    private final ApplicationEventPublisher eventPublisher;
 
-    @Autowired
-    public ServiceRequestServiceImpl(ServiceRequestRepository serviceRequestRepository, VehicleRepository vehicleRepository, AppUserService appUserService, ServiceVisitService serviceVisitService, ServiceRequestMapper serviceRequestMapper, EmailService emailService) {
+    public ServiceRequestServiceImpl(ServiceRequestRepository serviceRequestRepository,
+                                     VehicleRepository vehicleRepository,
+                                     AppUserService appUserService,
+                                     ServiceVisitService serviceVisitService,
+                                     ServiceRequestMapper serviceRequestMapper,
+                                     ApplicationEventPublisher eventPublisher) {
         this.serviceRequestRepository = serviceRequestRepository;
         this.vehicleRepository = vehicleRepository;
         this.appUserService = appUserService;
         this.serviceVisitService = serviceVisitService;
         this.serviceRequestMapper = serviceRequestMapper;
-        this.emailService = emailService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -65,7 +68,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
         ServiceRequest savedRequest = serviceRequestRepository.save(serviceRequest);
 
-        emailService.sendServiceRequestNotification(vehicle.getLicensePlate(), dto.description());
+        eventPublisher.publishEvent(new ServiceRequestCreatedEvent(vehicle.getLicensePlate(), dto.description()));
 
         return serviceRequestMapper.toResponseDto(savedRequest);
     }

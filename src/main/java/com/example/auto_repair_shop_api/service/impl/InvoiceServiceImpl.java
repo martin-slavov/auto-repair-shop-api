@@ -58,7 +58,7 @@ public class InvoiceServiceImpl implements InvoiceService {
         BigDecimal partsPrice = calculatePartsPrice(visitId);
 
         Invoice invoice = new Invoice();
-        invoice.setInvoiceNumber(generateInvoiceNumber());
+        invoice.setInvoiceNumber("INV-" + LocalDate.now().getYear() + "-" + String.format("%05d", visitId));
         invoice.setVisit(serviceVisit);
         invoice.setPartsPrice(partsPrice);
         invoice.setLaborPrice(laborPrice);
@@ -75,6 +75,10 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
+
+        if (invoice.isPaid()) {
+            throw new InvalidStateTransitionException("Invoice is already paid");
+        }
 
         invoice.setPaid(true);
         invoiceRepository.save(invoice);
@@ -95,11 +99,6 @@ public class InvoiceServiceImpl implements InvoiceService {
         return invoiceRepository.findByVisitVehicleOwnerId(appUser.getId()).stream()
                 .map(invoiceMapper::toResponseDto)
                 .toList();
-    }
-
-    private String generateInvoiceNumber() {
-        long count = invoiceRepository.count() + 1;
-        return "INV-" + LocalDate.now().getYear() + "-" + String.format("%05d", count);
     }
 
     private BigDecimal calculatePartsPrice(Long visitId) {

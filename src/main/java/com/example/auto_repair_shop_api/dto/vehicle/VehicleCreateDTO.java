@@ -22,4 +22,7 @@ public record VehicleCreateDTO(
         @ValidVehicleYear
         Integer year
 ) {
+    public VehicleCreateDTO {
+        licensePlate = licensePlate.replaceAll("\\s+", "").toUpperCase();
+    }
 }

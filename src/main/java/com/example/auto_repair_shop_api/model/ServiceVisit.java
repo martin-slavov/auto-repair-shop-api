@@ -6,7 +6,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "service_visit")
+@Table(name = "service_visit", uniqueConstraints = @UniqueConstraint(columnNames = {"service_visit_id", "mechanic_id"}))
 public class ServiceVisit {
 
     @Id
@@ -24,7 +24,7 @@ public class ServiceVisit {
     @Column(name = "completed_date")
     private LocalDateTime completedDate;
 
-    @Column(name = "technical_notes", columnDefinition = "TEXT")
+    @Column(name = "technical_notes", length = 5000)
     private String technicalNotes;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -32,7 +32,7 @@ public class ServiceVisit {
     private Vehicle vehicle;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "service_request_id")
+    @JoinColumn(name = "service_request_id", nullable = false, unique = true)
     private ServiceRequest serviceRequest;
 
     public ServiceVisit() {

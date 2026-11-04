@@ -15,7 +15,7 @@ public class ServiceRequest {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @Column(name = "description", nullable = false)
+    @Column(name = "description", nullable = false, length = 500)
     private String description;
 
     @Enumerated(EnumType.STRING)

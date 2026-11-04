@@ -13,10 +13,10 @@ public class Part {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @Column(name = "name", nullable = false)
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
 
-    @Column(name = "serial_number", nullable = false, unique = true)
+    @Column(name = "serial_number", nullable = false, unique = true, length = 60)
     private String serialNumber;
 
     @Column(name = "unit_cost", nullable = false)

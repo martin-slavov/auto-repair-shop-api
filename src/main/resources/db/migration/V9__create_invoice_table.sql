@@ -1,7 +1,7 @@
 CREATE TABLE invoice
 (
     id             BIGINT PRIMARY KEY AUTO_INCREMENT,
-    invoice_number VARCHAR(255)  NOT NULL UNIQUE,
+    invoice_number VARCHAR(70)  NOT NULL UNIQUE,
     visit_id       BIGINT        NOT NULL UNIQUE,
     parts_price    DECIMAL(8, 2) NOT NULL,
     labor_price    DECIMAL(8, 2) NOT NULL,

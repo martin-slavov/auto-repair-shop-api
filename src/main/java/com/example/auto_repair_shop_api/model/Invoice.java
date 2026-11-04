@@ -15,7 +15,7 @@ public class Invoice {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    @Column(name = "invoice_number", nullable = false, unique = true)
+    @Column(name = "invoice_number", nullable = false, unique = true,length = 70)
     private String invoiceNumber;
 
     @OneToOne

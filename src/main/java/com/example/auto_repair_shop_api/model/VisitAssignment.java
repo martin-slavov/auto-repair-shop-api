@@ -3,8 +3,10 @@ package com.example.auto_repair_shop_api.model;
 import com.example.auto_repair_shop_api.model.enums.AssignmentRole;
 import jakarta.persistence.*;
 
+import java.math.BigDecimal;
+
 @Entity
-@Table(name = "visit_assignment")
+@Table(name = "visit_assignment", uniqueConstraints = @UniqueConstraint(columnNames = {"service_visit_id", "mechanic_id"}))
 public class VisitAssignment {
 
     @Id
@@ -20,8 +22,8 @@ public class VisitAssignment {
     @JoinColumn(name = "mechanic_id", nullable = false)
     private AppUser mechanic;
 
-    @Column(name = "hours_worked", nullable = false)
-    private double hoursWorked;
+    @Column(name = "hours_worked", precision = 5, scale = 2)
+    private BigDecimal hoursWorked;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role_in_visit", nullable = false)
@@ -54,11 +56,11 @@ public class VisitAssignment {
         this.mechanic = mechanic;
     }
 
-    public double getHoursWorked() {
+    public BigDecimal getHoursWorked() {
         return hoursWorked;
     }
 
-    public void setHoursWorked(double hoursWorked) {
+    public void setHoursWorked(BigDecimal hoursWorked) {
         this.hoursWorked = hoursWorked;
     }
 

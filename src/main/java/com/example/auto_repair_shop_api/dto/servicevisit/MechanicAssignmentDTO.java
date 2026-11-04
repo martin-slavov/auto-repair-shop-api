@@ -1,4 +1,6 @@
 package com.example.auto_repair_shop_api.dto.servicevisit;
 
-public record MechanicAssignmentDTO(String mechanicName, String roleInVisit, double hoursWorked) {
+import java.math.BigDecimal;
+
+public record MechanicAssignmentDTO(String mechanicName, String roleInVisit, BigDecimal hoursWorked) {
 }

@@ -112,10 +112,10 @@ public class InvoiceServiceImpl implements InvoiceService {
     private BigDecimal calculateLaborPrice(Long visitId) {
         List<VisitAssignment> assignments = visitAssignmentRepository.findByServiceVisitId(visitId);
 
-        double totalHours = assignments.stream()
-                .mapToDouble(VisitAssignment::getHoursWorked)
-                .sum();
+        BigDecimal totalHours = assignments.stream()
+                .map(VisitAssignment::getHoursWorked)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return HOURLY_RATE.multiply(BigDecimal.valueOf(totalHours));
+        return HOURLY_RATE.multiply(totalHours);
     }
 }

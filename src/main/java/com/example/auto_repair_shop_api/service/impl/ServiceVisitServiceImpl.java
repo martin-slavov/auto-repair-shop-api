@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -60,7 +61,6 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         assignment.setServiceVisit(savedVisit);
         assignment.setMechanic(mechanic);
         assignment.setRoleInVisit(AssignmentRole.LEAD);
-        assignment.setHoursWorked(0.0);
 
         VisitAssignment savedAssignment = visitAssignmentRepository.save(assignment);
 
@@ -111,7 +111,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         serviceVisit.setTechnicalNotes(technicalNotes);
         serviceVisit.setCompletedDate(LocalDateTime.now());
 
-        assignment.setHoursWorked(hoursWorked);
+        assignment.setHoursWorked(BigDecimal.valueOf(hoursWorked));
         visitAssignmentRepository.save(assignment);
 
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);

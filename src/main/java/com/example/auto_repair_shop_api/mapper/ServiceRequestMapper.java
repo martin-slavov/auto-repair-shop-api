@@ -13,7 +13,8 @@ public class ServiceRequestMapper {
                 request.getDescription(),
                 request.getStatus().name(),
                 request.getCreatedAt(),
-                request.getVehicle().getLicensePlate()
+                request.getVehicle().getLicensePlate(),
+                request.getPreferredDate()
         );
     }
 }

@@ -20,7 +20,8 @@ public class VehicleMapper {
                 vehicle.getModel(),
                 vehicle.getYear(),
                 owner.getId(),
-                ownerName
+                ownerName,
+                vehicle.getFirstRegistrationDate()
         );
     }
 }

@@ -47,6 +47,7 @@ public class VehicleServiceImpl implements VehicleService {
         vehicle.setManufacturer(dto.manufacturer());
         vehicle.setModel(dto.model());
         vehicle.setYear(dto.year());
+        vehicle.setFirstRegistrationDate(dto.firstRegistrationDate());
         vehicle.setOwner(appUser);
 
         Vehicle savedVehicle = vehicleRepository.save(vehicle);

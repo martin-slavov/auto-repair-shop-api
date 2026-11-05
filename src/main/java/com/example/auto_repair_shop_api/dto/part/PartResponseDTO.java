@@ -7,6 +7,7 @@ public record PartResponseDTO(
         String name,
         String serialNumber,
         BigDecimal unitCost,
-        BigDecimal unitSellPrice
+        BigDecimal unitSellPrice,
+        Boolean active
 ) {
 }

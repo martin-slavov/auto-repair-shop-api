@@ -2,8 +2,10 @@ package com.example.auto_repair_shop_api.model;
 
 import com.example.auto_repair_shop_api.model.enums.AssignmentRole;
 import jakarta.persistence.*;
+import org.hibernate.annotations.CreationTimestamp;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "visit_assignment", uniqueConstraints = @UniqueConstraint(columnNames = {"service_visit_id", "mechanic_id"}))
@@ -28,6 +30,10 @@ public class VisitAssignment {
     @Enumerated(EnumType.STRING)
     @Column(name = "role_in_visit", nullable = false)
     private AssignmentRole roleInVisit;
+
+    @CreationTimestamp
+    @Column(name = "assigned_at", nullable = false, updatable = false)
+    private LocalDateTime assignedAt;
 
     public VisitAssignment() {
     }
@@ -72,12 +78,21 @@ public class VisitAssignment {
         this.roleInVisit = roleInVisit;
     }
 
+    public LocalDateTime getAssignedAt() {
+        return assignedAt;
+    }
+
+    public void setAssignedAt(LocalDateTime assignedAt) {
+        this.assignedAt = assignedAt;
+    }
+
     @Override
     public String toString() {
         return "VisitAssignment{" +
                 "id=" + id +
                 ", hoursWorked=" + hoursWorked +
                 ", roleInVisit=" + roleInVisit +
+                ", assignedAt=" + assignedAt +
                 '}';
     }
 }

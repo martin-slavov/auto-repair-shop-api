@@ -63,6 +63,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
         ServiceRequest serviceRequest = new ServiceRequest();
         serviceRequest.setDescription(dto.description());
+        serviceRequest.setPreferredDate(dto.preferredDate());
         serviceRequest.setStatus(RequestStatus.PENDING);
         serviceRequest.setVehicle(vehicle);
 

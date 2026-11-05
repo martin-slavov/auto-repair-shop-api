@@ -2,6 +2,8 @@ package com.example.auto_repair_shop_api.model;
 
 import jakarta.persistence.*;
 
+import java.time.LocalDate;
+
 @Entity
 @Table(name = "vehicle")
 public class Vehicle {
@@ -22,6 +24,9 @@ public class Vehicle {
 
     @Column(name = "year", nullable = false)
     private Integer year;
+
+    @Column(name = "first_registration_date")
+    private LocalDate firstRegistrationDate;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
@@ -70,6 +75,14 @@ public class Vehicle {
         this.year = year;
     }
 
+    public LocalDate getFirstRegistrationDate() {
+        return firstRegistrationDate;
+    }
+
+    public void setFirstRegistrationDate(LocalDate firstRegistrationDate) {
+        this.firstRegistrationDate = firstRegistrationDate;
+    }
+
     public AppUser getOwner() {
         return owner;
     }
@@ -86,6 +99,7 @@ public class Vehicle {
                 ", manufacturer='" + manufacturer + '\'' +
                 ", model='" + model + '\'' +
                 ", year=" + year +
+                ", firstRegistrationDate=" + firstRegistrationDate +
                 '}';
     }
 }

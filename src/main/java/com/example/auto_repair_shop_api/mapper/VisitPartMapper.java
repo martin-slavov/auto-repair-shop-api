@@ -12,7 +12,8 @@ public class VisitPartMapper {
                 visitPart.getId(),
                 visitPart.getPart().getName(),
                 visitPart.getQuantity(),
-                visitPart.getPriceAtTimeOfUse()
+                visitPart.getPriceAtTimeOfUse(),
+                visitPart.getAddedAt()
         );
     }
 }

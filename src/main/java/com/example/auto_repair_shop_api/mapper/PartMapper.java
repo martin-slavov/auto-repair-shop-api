@@ -14,7 +14,8 @@ public class PartMapper {
                 part.getName(),
                 part.getSerialNumber(),
                 part.getUnitCost(),
-                part.getUnitSellPrice()
+                part.getUnitSellPrice(),
+                part.getActive()
         );
     }
 
@@ -22,7 +23,8 @@ public class PartMapper {
         return new PartCatalogDTO(
                 part.getId(),
                 part.getName(),
-                part.getUnitSellPrice()
+                part.getUnitSellPrice(),
+                part.getActive()
         );
     }
 }

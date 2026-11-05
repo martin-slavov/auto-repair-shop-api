@@ -3,7 +3,10 @@ package com.example.auto_repair_shop_api.dto.vehicle;
 import com.example.auto_repair_shop_api.validation.ValidVehicleYear;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
+
+import java.time.LocalDate;
 
 public record VehicleCreateDTO(
         @NotBlank(message = "License plate is required")
@@ -20,9 +23,14 @@ public record VehicleCreateDTO(
 
         @NotNull(message = "Year is required")
         @ValidVehicleYear
-        Integer year
+        Integer year,
+
+        @PastOrPresent(message = "First registration date cannot be in the future")
+        LocalDate firstRegistrationDate
 ) {
     public VehicleCreateDTO {
-        licensePlate = licensePlate.replaceAll("\\s+", "").toUpperCase();
+        if (licensePlate != null) {
+            licensePlate = licensePlate.replaceAll("\\s+", "").toUpperCase();
+        }
     }
 }

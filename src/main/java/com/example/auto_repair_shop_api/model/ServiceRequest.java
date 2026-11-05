@@ -4,6 +4,7 @@ import com.example.auto_repair_shop_api.model.enums.RequestStatus;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -25,6 +26,9 @@ public class ServiceRequest {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "preferred_date")
+    private LocalDate preferredDate;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id", nullable = false)
@@ -65,6 +69,14 @@ public class ServiceRequest {
         this.createdAt = createdAt;
     }
 
+    public LocalDate getPreferredDate() {
+        return preferredDate;
+    }
+
+    public void setPreferredDate(LocalDate preferredDate) {
+        this.preferredDate = preferredDate;
+    }
+
     public Vehicle getVehicle() {
         return vehicle;
     }
@@ -80,6 +92,7 @@ public class ServiceRequest {
                 ", description='" + description + '\'' +
                 ", status=" + status +
                 ", createdAt=" + createdAt +
+                ", preferredDate=" + preferredDate +
                 '}';
     }
 }

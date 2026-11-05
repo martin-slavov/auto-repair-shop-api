@@ -25,6 +25,9 @@ public class Part {
     @Column(name = "unit_sell_price", nullable = false)
     private BigDecimal unitSellPrice;
 
+    @Column(name = "active", nullable = false)
+    private Boolean active = true;
+
     public Part() {
     }
 
@@ -68,6 +71,14 @@ public class Part {
         this.unitSellPrice = unitSellPrice;
     }
 
+    public Boolean getActive() {
+        return active;
+    }
+
+    public void setActive(Boolean active) {
+        this.active = active;
+    }
+
     @Override
     public String toString() {
         return "Part{" +
@@ -76,6 +87,7 @@ public class Part {
                 ", serialNumber='" + serialNumber + '\'' +
                 ", unitCost=" + unitCost +
                 ", unitSellPrice=" + unitSellPrice +
+                ", active=" + active +
                 '}';
     }
 }

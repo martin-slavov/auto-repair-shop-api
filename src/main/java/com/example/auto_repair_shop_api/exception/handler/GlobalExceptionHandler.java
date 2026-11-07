@@ -5,17 +5,18 @@ import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
-import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
-import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -52,18 +53,25 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getAllErrors().stream()
-                .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .collect(Collectors.joining("; "));
-        return build(HttpStatus.BAD_REQUEST, message);
+        Map<String, String> fieldErrors = new HashMap<>();
+        for (FieldError error : ex.getBindingResult().getFieldErrors()) {
+            fieldErrors.put(error.getField(), error.getDefaultMessage());
+        }
+        return build(HttpStatus.BAD_REQUEST, "Validation failed", fieldErrors);
     }
 
     private ResponseEntity<ErrorResponse> build(HttpStatus status, String message) {
+        return build(status, message, Map.of());
+    }
+
+    private ResponseEntity<ErrorResponse> build(HttpStatus status, String message, Map<String, String> fieldErrors) {
         return ResponseEntity.status(status).body(
                 new ErrorResponse(
                         status.value(),
                         message,
-                        LocalDateTime.now())
+                        LocalDateTime.now(),
+                        fieldErrors
+                )
         );
     }
 }

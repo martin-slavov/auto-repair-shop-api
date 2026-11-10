@@ -8,4 +8,6 @@ import java.util.List;
 public interface VisitPartRepository extends JpaRepository<VisitPart, Long> {
 
     List<VisitPart> findByServiceVisitId(Long visitId);
+
+    boolean existsByPartId(Long partId);
 }

@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.controller;
 
 import com.example.auto_repair_shop_api.dto.part.PartCreateDTO;
 import com.example.auto_repair_shop_api.dto.part.PartResponseDTO;
+import com.example.auto_repair_shop_api.dto.part.PartUpdateDTO;
 import com.example.auto_repair_shop_api.service.PartService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -40,5 +41,23 @@ public class PartController {
         List<?> result = partService.getPartsForCurrentUser(currentUsername);
 
         return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Update a part (admin only)")
+    @PutMapping("/{id}")
+    public ResponseEntity<PartResponseDTO> updatePart(@PathVariable Long id, @Valid @RequestBody PartUpdateDTO partUpdateDTO) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        PartResponseDTO response = partService.updatePart(id, partUpdateDTO, currentUsername);
+        return ResponseEntity.ok().body(response);
+    }
+
+    @Operation(summary = "Delete a part (admin only); fails if the part is used in a service visit")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletePart(@PathVariable Long id) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        partService.deletePart(id, currentUsername);
+        return ResponseEntity.noContent().build();
     }
 }

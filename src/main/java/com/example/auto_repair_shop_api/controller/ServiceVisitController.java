@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.controller;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.CompleteVisitDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.UpdateVisitStatusDTO;
 import com.example.auto_repair_shop_api.service.InvoiceService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
@@ -62,5 +63,21 @@ public class ServiceVisitController {
 
         InvoiceResponseDTO result = invoiceService.createInvoice(id);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
+    }
+
+    @Operation(summary = "Reschedule a scheduled visit (admin only)")
+    @PutMapping("/{id}")
+    public ResponseEntity<ServiceVisitResponseDTO> updateVisit(@PathVariable Long id, @Valid @RequestBody ServiceVisitUpdateDTO dto) {
+
+        ServiceVisitResponseDTO result = serviceVisitService.updateVisit(id, dto);
+        return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Delete a scheduled visit without parts (admin only); the request goes back to PENDING")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteVisit(@PathVariable Long id) {
+
+        serviceVisitService.deleteVisit(id);
+        return ResponseEntity.noContent().build();
     }
 }

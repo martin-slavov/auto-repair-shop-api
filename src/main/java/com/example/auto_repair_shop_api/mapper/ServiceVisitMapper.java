@@ -12,16 +12,24 @@ import java.util.List;
 public class ServiceVisitMapper {
 
     public ServiceVisitResponseDTO toResponseDto(ServiceVisit visit, VisitAssignment assignment) {
+        return toResponseDto(visit, List.of(assignment));
+    }
 
-        MechanicAssignmentDTO mechanicDto = new MechanicAssignmentDTO(
-                assignment.getMechanic().getFirstName() + " " + assignment.getMechanic().getLastName(),
-                assignment.getRoleInVisit().name(),
-                assignment.getHoursWorked()
-        );
+    // Used when the caller is not one specific mechanic (e.g. an admin): shows every assigned mechanic.
+    public ServiceVisitResponseDTO toResponseDto(ServiceVisit visit, List<VisitAssignment> assignments) {
+
+        List<MechanicAssignmentDTO> mechanics = assignments.stream()
+                .map(assignment -> new MechanicAssignmentDTO(
+                        assignment.getMechanic().getFirstName() + " " + assignment.getMechanic().getLastName(),
+                        assignment.getRoleInVisit().name(),
+                        assignment.getHoursWorked()
+                ))
+                .toList();
+
         return new ServiceVisitResponseDTO(
                 visit.getId(), visit.getStatus().name(), visit.getScheduledDate(),
                 visit.getCompletedDate(), visit.getTechnicalNotes(),
-                visit.getVehicle().getLicensePlate(), List.of(mechanicDto)
+                visit.getVehicle().getLicensePlate(), mechanics
         );
     }
 }

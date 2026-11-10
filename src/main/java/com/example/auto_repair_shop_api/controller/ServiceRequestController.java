@@ -46,7 +46,7 @@ public class ServiceRequestController {
 
     @Operation(summary = "Approve a pending service request and assign a mechanic (admin only)")
     @PatchMapping("/{id}/approve")
-    public ResponseEntity<ServiceRequestResponseDTO> approveServiceRequest(@PathVariable Long id, @RequestBody ApproveRequestDTO dto) {
+    public ResponseEntity<ServiceRequestResponseDTO> approveServiceRequest(@PathVariable Long id, @Valid @RequestBody ApproveRequestDTO dto) {
 
         ServiceRequestResponseDTO result = serviceRequestService.approveRequest(id, dto);
         return ResponseEntity.ok().body(result);

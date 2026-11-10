@@ -4,7 +4,6 @@ import com.example.auto_repair_shop_api.dto.part.PartCreateDTO;
 import com.example.auto_repair_shop_api.dto.part.PartResponseDTO;
 import com.example.auto_repair_shop_api.dto.part.PartUpdateDTO;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
-import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.PartMapper;
@@ -77,9 +76,8 @@ public class PartServiceImpl implements PartService {
 
     @Override
     @Transactional
-    public PartResponseDTO updatePart(Long id, PartUpdateDTO dto, String currentUsername) {
+    public PartResponseDTO updatePart(Long id, PartUpdateDTO dto) {
 
-        requireAdmin(currentUsername, "Only admins can update parts");
         Part part = getPartOrThrow(id);
 
         if (partRepository.existsBySerialNumberAndIdNot(dto.serialNumber(), id)) {
@@ -98,9 +96,8 @@ public class PartServiceImpl implements PartService {
 
     @Override
     @Transactional
-    public void deletePart(Long id, String currentUsername) {
+    public void deletePart(Long id) {
 
-        requireAdmin(currentUsername, "Only admins can delete parts");
         Part part = getPartOrThrow(id);
 
         if (visitPartRepository.existsByPartId(id)) {
@@ -108,13 +105,6 @@ public class PartServiceImpl implements PartService {
         }
 
         partRepository.delete(part);
-    }
-
-    private void requireAdmin(String currentUsername, String message) {
-        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
-        if (appUser.getRole() != Role.ADMIN) {
-            throw new OwnershipViolationException(message);
-        }
     }
 
     private Part getPartOrThrow(Long id) {

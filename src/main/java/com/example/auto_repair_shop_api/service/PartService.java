@@ -12,7 +12,7 @@ public interface PartService {
 
     List<?> getPartsForCurrentUser(String currentUsername);
 
-    PartResponseDTO updatePart(Long id, PartUpdateDTO dto, String currentUsername);
+    PartResponseDTO updatePart(Long id, PartUpdateDTO dto);
 
-    void deletePart(Long id, String currentUsername);
+    void deletePart(Long id);
 }

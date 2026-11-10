@@ -47,8 +47,7 @@ public class PartController {
     @PutMapping("/{id}")
     public ResponseEntity<PartResponseDTO> updatePart(@PathVariable Long id, @Valid @RequestBody PartUpdateDTO partUpdateDTO) {
 
-        String currentUsername = SecurityUtils.getCurrentUsername();
-        PartResponseDTO response = partService.updatePart(id, partUpdateDTO, currentUsername);
+        PartResponseDTO response = partService.updatePart(id, partUpdateDTO);
         return ResponseEntity.ok().body(response);
     }
 
@@ -56,8 +55,7 @@ public class PartController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePart(@PathVariable Long id) {
 
-        String currentUsername = SecurityUtils.getCurrentUsername();
-        partService.deletePart(id, currentUsername);
+        partService.deletePart(id);
         return ResponseEntity.noContent().build();
     }
 }

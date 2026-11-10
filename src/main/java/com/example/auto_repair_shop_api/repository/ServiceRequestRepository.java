@@ -11,4 +11,6 @@ public interface ServiceRequestRepository extends JpaRepository<ServiceRequest, 
     List<ServiceRequest> findByVehicleOwnerId(Long ownerId);
 
     List<ServiceRequest> findByStatus(RequestStatus status);
+
+    boolean existsByVehicleId(Long vehicleId);
 }

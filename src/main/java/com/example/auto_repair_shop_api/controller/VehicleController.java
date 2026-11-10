@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.controller;
 
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleCreateDTO;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleResponseDTO;
+import com.example.auto_repair_shop_api.dto.vehicle.VehicleUpdateDTO;
 import com.example.auto_repair_shop_api.service.VehicleService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -52,5 +53,25 @@ public class VehicleController {
         VehicleResponseDTO response = vehicleService.getVehicleById(id, currentUsername);
 
         return ResponseEntity.ok().body(response);
+    }
+
+    @Operation(summary = "Update a vehicle (owner or admin)")
+    @PutMapping("/{id}")
+    public ResponseEntity<VehicleResponseDTO> updateVehicle(@PathVariable Long id, @Valid @RequestBody VehicleUpdateDTO vehicle) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        VehicleResponseDTO response = vehicleService.updateVehicle(id, vehicle, currentUsername);
+
+        return ResponseEntity.ok().body(response);
+    }
+
+    @Operation(summary = "Delete a vehicle (owner or admin); fails if it has service requests or visits")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteVehicle(@PathVariable Long id) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        vehicleService.deleteVehicle(id, currentUsername);
+
+        return ResponseEntity.noContent().build();
     }
 }

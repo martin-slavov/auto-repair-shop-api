@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service;
 import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestUpdateDTO;
 
 import java.util.List;
 
@@ -15,4 +16,8 @@ public interface ServiceRequestService {
     ServiceRequestResponseDTO approveRequest(Long requestId, ApproveRequestDTO dto);
 
     ServiceRequestResponseDTO rejectRequest(Long requestId);
+
+    ServiceRequestResponseDTO updateRequest(Long requestId, ServiceRequestUpdateDTO dto, String currentUsername);
+
+    void deleteRequest(Long requestId, String currentUsername);
 }

@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.controller;
 import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestUpdateDTO;
 import com.example.auto_repair_shop_api.service.ServiceRequestService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -57,5 +58,24 @@ public class ServiceRequestController {
 
         ServiceRequestResponseDTO result = serviceRequestService.rejectRequest(id);
         return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Update a pending service request (owner or admin)")
+    @PutMapping("/{id}")
+    public ResponseEntity<ServiceRequestResponseDTO> updateServiceRequest(@PathVariable Long id,
+                                                                          @Valid @RequestBody ServiceRequestUpdateDTO dto) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        ServiceRequestResponseDTO result = serviceRequestService.updateRequest(id, dto, currentUsername);
+        return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Delete a pending service request (owner or admin)")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteServiceRequest(@PathVariable Long id) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        serviceRequestService.deleteRequest(id, currentUsername);
+        return ResponseEntity.noContent().build();
     }
 }

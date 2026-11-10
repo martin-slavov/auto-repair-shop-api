@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestUpdateDTO;
 import com.example.auto_repair_shop_api.event.ServiceRequestCreatedEvent;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
@@ -110,10 +111,55 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         return serviceRequestMapper.toResponseDto(result);
     }
 
+    @Override
+    @Transactional
+    public ServiceRequestResponseDTO updateRequest(Long requestId, ServiceRequestUpdateDTO dto, String currentUsername) {
+
+        ServiceRequest serviceRequest = getEditableRequestOrThrow(requestId, currentUsername, "updated");
+
+        serviceRequest.setDescription(dto.description());
+        serviceRequest.setPreferredDate(dto.preferredDate());
+        serviceRequest.setType(dto.type());
+
+        ServiceRequest updatedRequest = serviceRequestRepository.save(serviceRequest);
+        return serviceRequestMapper.toResponseDto(updatedRequest);
+    }
+
+    @Override
+    @Transactional
+    public void deleteRequest(Long requestId, String currentUsername) {
+
+        ServiceRequest serviceRequest = getEditableRequestOrThrow(requestId, currentUsername, "deleted");
+        serviceRequestRepository.delete(serviceRequest);
+    }
+
+    private ServiceRequest getEditableRequestOrThrow(Long requestId, String currentUsername, String action) {
+
+        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
+        ServiceRequest serviceRequest = getRequestOrThrow(requestId);
+
+        boolean isOwner = serviceRequest.getVehicle().getOwner().getId().equals(appUser.getId());
+        boolean isAdmin = appUser.getRole() == Role.ADMIN;
+
+        if (!isOwner && !isAdmin) {
+            throw new OwnershipViolationException("You can only modify service requests for your own vehicles");
+        }
+
+        if (serviceRequest.getStatus() != RequestStatus.PENDING) {
+            throw new InvalidStateTransitionException("Only pending requests can be " + action);
+        }
+
+        return serviceRequest;
+    }
+
+    private ServiceRequest getRequestOrThrow(Long requestId) {
+        return serviceRequestRepository.findById(requestId)
+                .orElseThrow(() -> new ResourceNotFoundException("Service request not found with ID: " + requestId));
+    }
+
     private ServiceRequest changeStatus(Long requestId, RequestStatus status, String illegalStateMessage) {
 
-        ServiceRequest serviceRequest = serviceRequestRepository.findById(requestId)
-                .orElseThrow(() -> new ResourceNotFoundException("Service request not found with ID: " + requestId));
+        ServiceRequest serviceRequest = getRequestOrThrow(requestId);
 
         if (serviceRequest.getStatus() != RequestStatus.PENDING) {
             throw new InvalidStateTransitionException(illegalStateMessage);

@@ -12,6 +12,7 @@ import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.enums.RequestStatus;
+import com.example.auto_repair_shop_api.model.enums.RequestType;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.ServiceRequestRepository;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
@@ -65,6 +66,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         serviceRequest.setDescription(dto.description());
         serviceRequest.setPreferredDate(dto.preferredDate());
         serviceRequest.setStatus(RequestStatus.PENDING);
+        serviceRequest.setType(dto.type() != null ? dto.type() : RequestType.SERVICE);
         serviceRequest.setVehicle(vehicle);
 
         ServiceRequest savedRequest = serviceRequestRepository.save(serviceRequest);

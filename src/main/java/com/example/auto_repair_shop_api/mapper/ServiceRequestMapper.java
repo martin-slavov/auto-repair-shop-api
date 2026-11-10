@@ -12,6 +12,7 @@ public class ServiceRequestMapper {
                 request.getId(),
                 request.getDescription(),
                 request.getStatus().name(),
+                request.getType().name(),
                 request.getCreatedAt(),
                 request.getVehicle().getLicensePlate(),
                 request.getPreferredDate()

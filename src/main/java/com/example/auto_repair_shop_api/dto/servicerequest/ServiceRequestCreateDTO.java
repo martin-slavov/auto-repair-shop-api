@@ -1,5 +1,6 @@
 package com.example.auto_repair_shop_api.dto.servicerequest;
 
+import com.example.auto_repair_shop_api.model.enums.RequestType;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -16,6 +17,9 @@ public record ServiceRequestCreateDTO(
         String description,
 
         @FutureOrPresent(message = "Preferred date cannot be in the past")
-        LocalDate preferredDate
+        LocalDate preferredDate,
+
+        // Optional: when null, the service uses RequestType.SERVICE
+        RequestType type
 ) {
 }

@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.model;
 
 import com.example.auto_repair_shop_api.model.enums.RequestStatus;
+import com.example.auto_repair_shop_api.model.enums.RequestType;
 import jakarta.persistence.*;
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -22,6 +23,10 @@ public class ServiceRequest {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private RequestStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "type", nullable = false)
+    private RequestType type;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -61,6 +66,14 @@ public class ServiceRequest {
         this.status = status;
     }
 
+    public RequestType getType() {
+        return type;
+    }
+
+    public void setType(RequestType type) {
+        this.type = type;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -91,6 +104,7 @@ public class ServiceRequest {
                 "id=" + id +
                 ", description='" + description + '\'' +
                 ", status=" + status +
+                ", type=" + type +
                 ", createdAt=" + createdAt +
                 ", preferredDate=" + preferredDate +
                 '}';

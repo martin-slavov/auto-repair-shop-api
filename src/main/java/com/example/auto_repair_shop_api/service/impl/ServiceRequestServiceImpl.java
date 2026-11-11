@@ -4,6 +4,7 @@ import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestUpdateDTO;
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.event.ServiceRequestCreatedEvent;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
@@ -20,14 +21,39 @@ import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.service.ServiceRequestService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
+import com.example.auto_repair_shop_api.util.PageRequestFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.hasStatus;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.hasType;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.hasVehicleId;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.licensePlateContains;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.preferredOnOrAfter;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.preferredOnOrBefore;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.vehicleOwnedBy;
 
 @Service
 public class ServiceRequestServiceImpl implements ServiceRequestService {
+
+    // Sort whitelist: API field name -> entity property.
+    private static final Map<String, String> SORT_FIELDS = Map.of(
+            "preferredDate", "preferredDate",
+            "status", "status",
+            "type", "type",
+            "createdAt", "createdAt"
+    );
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
 
     private final ServiceRequestRepository serviceRequestRepository;
     private final VehicleRepository vehicleRepository;
@@ -78,20 +104,47 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     }
 
     @Override
-    public List<ServiceRequestResponseDTO> getRequestsForCurrentUser(String currentUsername) {
+    public PageResponse<ServiceRequestResponseDTO> getRequestsForCurrentUser(String currentUsername,
+                                                                             RequestStatus status, RequestType type,
+                                                                             LocalDate preferredFrom, LocalDate preferredTo,
+                                                                             String licensePlate, Long vehicleId,
+                                                                             Integer page, Integer size, String sort) {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
-        List<ServiceRequest> requests;
-        if (appUser.getRole() == Role.ADMIN) {
-            requests = serviceRequestRepository.findByStatus(RequestStatus.PENDING);
-        } else {
-            requests = serviceRequestRepository.findByVehicleOwnerId(appUser.getId());
+        if (preferredFrom != null && preferredTo != null && preferredFrom.isAfter(preferredTo)) {
+            throw new IllegalArgumentException("preferredFrom must not be after preferredTo");
         }
 
-        return requests.stream()
-                .map(serviceRequestMapper::toResponseDto)
-                .toList();
+        PageRequest pageRequest = PageRequestFactory.create(page, size, sort, SORT_FIELDS, DEFAULT_SORT);
+
+        List<Specification<ServiceRequest>> filters = new ArrayList<>();
+
+        if (appUser.getRole() != Role.ADMIN) {
+            filters.add(vehicleOwnedBy(appUser.getId()));
+        }
+
+        if (status != null) {
+            filters.add(hasStatus(status));
+        }
+        if (type != null) {
+            filters.add(hasType(type));
+        }
+        if (preferredFrom != null) {
+            filters.add(preferredOnOrAfter(preferredFrom));
+        }
+        if (preferredTo != null) {
+            filters.add(preferredOnOrBefore(preferredTo));
+        }
+        if (licensePlate != null && !licensePlate.isBlank()) {
+            filters.add(licensePlateContains(licensePlate));
+        }
+        if (vehicleId != null) {
+            filters.add(hasVehicleId(vehicleId));
+        }
+
+        Page<ServiceRequest> result = serviceRequestRepository.findAll(Specification.allOf(filters), pageRequest);
+        return PageResponse.from(result, serviceRequestMapper::toResponseDto);
     }
 
     @Override

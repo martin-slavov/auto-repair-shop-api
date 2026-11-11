@@ -26,4 +26,13 @@ public final class SpecificationUtils {
     public static String containsPattern(String value) {
         return "%" + escapeLike(value.trim().toLowerCase(Locale.ROOT)) + "%";
     }
+
+    /**
+     * Like containsPattern, but first normalizes the text exactly like stored plates
+     * (whitespace removed, upper case - see VehicleCreateDTO), so "ca 12" finds "CA1234AB".
+     */
+    public static String licensePlateContainsPattern(String licensePlate) {
+        String normalized = licensePlate.replaceAll("\\s+", "").toUpperCase(Locale.ROOT);
+        return containsPattern(normalized);
+    }
 }

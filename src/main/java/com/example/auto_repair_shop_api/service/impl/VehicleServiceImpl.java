@@ -106,8 +106,7 @@ public class VehicleServiceImpl implements VehicleService {
 
         List<Specification<Vehicle>> filters = new ArrayList<>();
 
-        // Ownership scope first: non-admins only ever see their own vehicles.
-        // The ownerId parameter is honoured for admins only, so it cannot widen this scope.
+
         if (appUser.getRole() != Role.ADMIN) {
             filters.add(ownedBy(appUser.getId()));
         } else if (ownerId != null) {
@@ -130,7 +129,6 @@ public class VehicleServiceImpl implements VehicleService {
             filters.add(yearAtMost(yearTo));
         }
 
-        // allOf ANDs every piece, so the extra filters can only narrow the ownership scope.
         Page<Vehicle> result = vehicleRepository.findAll(Specification.allOf(filters), pageRequest);
         return PageResponse.from(result, vehicleMapper::toResponseDto);
     }

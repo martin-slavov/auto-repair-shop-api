@@ -12,7 +12,6 @@ import java.util.List;
 
 public interface VehicleRepository extends JpaRepository<Vehicle, Long>, JpaSpecificationExecutor<Vehicle> {
 
-    // Load the owner in the same query: the mapper reads the owner's name for every row.
     @Override
     @EntityGraph(attributePaths = "owner")
     Page<Vehicle> findAll(Specification<Vehicle> spec, Pageable pageable);

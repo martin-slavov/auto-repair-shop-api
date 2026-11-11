@@ -4,7 +4,9 @@ import com.example.auto_repair_shop_api.model.CatalogItem;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.math.BigDecimal;
-import java.util.Locale;
+
+import static com.example.auto_repair_shop_api.repository.specification.SpecificationUtils.LIKE_ESCAPE;
+import static com.example.auto_repair_shop_api.repository.specification.SpecificationUtils.containsPattern;
 
 /**
  * Reusable filter pieces for CatalogItem searches. The service only adds a piece
@@ -12,14 +14,12 @@ import java.util.Locale;
  */
 public final class CatalogItemSpecifications {
 
-    private static final char LIKE_ESCAPE = '\\';
-
     private CatalogItemSpecifications() {
     }
 
     /** Case-insensitive "contains". '%' and '_' typed by the user are matched literally. */
     public static Specification<CatalogItem> nameContains(String name) {
-        String pattern = "%" + escapeLike(name.trim().toLowerCase(Locale.ROOT)) + "%";
+        String pattern = containsPattern(name);
         return (root, query, cb) -> cb.like(cb.lower(root.get("name")), pattern, LIKE_ESCAPE);
     }
 
@@ -33,13 +33,5 @@ public final class CatalogItemSpecifications {
 
     public static Specification<CatalogItem> hasActive(boolean active) {
         return (root, query, cb) -> cb.equal(root.get("active"), active);
-    }
-
-    // Escape the escape character first, then the LIKE wildcards.
-    private static String escapeLike(String value) {
-        return value
-                .replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_");
     }
 }

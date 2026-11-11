@@ -33,3 +33,7 @@ build/
 .vscode/
 
 src/main/resources/application.properties
+
+# Local Claude Code settings (personal, not part of the project)
+.claude/settings.local.json
+.claude/worktrees/

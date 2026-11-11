@@ -3,14 +3,16 @@ package com.example.auto_repair_shop_api.service;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleCreateDTO;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleResponseDTO;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleUpdateDTO;
-
-import java.util.List;
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 
 public interface VehicleService {
 
     VehicleResponseDTO createVehicle(VehicleCreateDTO dto, String currentUsername);
 
-    List<VehicleResponseDTO> getVehiclesByCurrentUser(String currentUsername);
+    PageResponse<VehicleResponseDTO> getVehiclesByCurrentUser(String currentUsername,
+                                                              String licensePlate, String manufacturer, String model,
+                                                              Integer yearFrom, Integer yearTo, Long ownerId,
+                                                              Integer page, Integer size, String sort);
 
     VehicleResponseDTO getVehicleById(Long id,  String currentUsername);
 

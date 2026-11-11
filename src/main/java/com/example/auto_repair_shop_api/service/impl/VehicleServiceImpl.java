@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleCreateDTO;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleResponseDTO;
 import com.example.auto_repair_shop_api.dto.vehicle.VehicleUpdateDTO;
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
@@ -16,14 +17,38 @@ import com.example.auto_repair_shop_api.repository.ServiceVisitRepository;
 import com.example.auto_repair_shop_api.repository.VehicleRepository;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.service.VehicleService;
+import com.example.auto_repair_shop_api.util.PageRequestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+
+import static com.example.auto_repair_shop_api.repository.specification.VehicleSpecifications.licensePlateContains;
+import static com.example.auto_repair_shop_api.repository.specification.VehicleSpecifications.manufacturerContains;
+import static com.example.auto_repair_shop_api.repository.specification.VehicleSpecifications.modelContains;
+import static com.example.auto_repair_shop_api.repository.specification.VehicleSpecifications.ownedBy;
+import static com.example.auto_repair_shop_api.repository.specification.VehicleSpecifications.yearAtLeast;
+import static com.example.auto_repair_shop_api.repository.specification.VehicleSpecifications.yearAtMost;
 
 @Service
 public class VehicleServiceImpl implements VehicleService {
+
+    // Sort whitelist: API field name -> entity property.
+    private static final Map<String, String> SORT_FIELDS = Map.of(
+            "licensePlate", "licensePlate",
+            "manufacturer", "manufacturer",
+            "model", "model",
+            "year", "year",
+            "firstRegistrationDate", "firstRegistrationDate"
+    );
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.ASC, "licensePlate");
 
     private final AppUserService appUserService;
     private final VehicleRepository vehicleRepository;
@@ -66,20 +91,48 @@ public class VehicleServiceImpl implements VehicleService {
     }
 
     @Override
-    public List<VehicleResponseDTO> getVehiclesByCurrentUser(String currentUsername) {
+    public PageResponse<VehicleResponseDTO> getVehiclesByCurrentUser(String currentUsername,
+                                                                     String licensePlate, String manufacturer, String model,
+                                                                     Integer yearFrom, Integer yearTo, Long ownerId,
+                                                                     Integer page, Integer size, String sort) {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
-        List<Vehicle> vehicles;
-        if (appUser.getRole() == Role.ADMIN) {
-            vehicles = vehicleRepository.findAll();
-        } else {
-            vehicles = vehicleRepository.findByOwnerId(appUser.getId());
+        if (yearFrom != null && yearTo != null && yearFrom > yearTo) {
+            throw new IllegalArgumentException("yearFrom must not be greater than yearTo");
         }
 
-        return vehicles.stream()
-                .map(vehicleMapper::toResponseDto)
-                .toList();
+        PageRequest pageRequest = PageRequestFactory.create(page, size, sort, SORT_FIELDS, DEFAULT_SORT);
+
+        List<Specification<Vehicle>> filters = new ArrayList<>();
+
+        // Ownership scope first: non-admins only ever see their own vehicles.
+        // The ownerId parameter is honoured for admins only, so it cannot widen this scope.
+        if (appUser.getRole() != Role.ADMIN) {
+            filters.add(ownedBy(appUser.getId()));
+        } else if (ownerId != null) {
+            filters.add(ownedBy(ownerId));
+        }
+
+        if (licensePlate != null && !licensePlate.isBlank()) {
+            filters.add(licensePlateContains(licensePlate));
+        }
+        if (manufacturer != null && !manufacturer.isBlank()) {
+            filters.add(manufacturerContains(manufacturer));
+        }
+        if (model != null && !model.isBlank()) {
+            filters.add(modelContains(model));
+        }
+        if (yearFrom != null) {
+            filters.add(yearAtLeast(yearFrom));
+        }
+        if (yearTo != null) {
+            filters.add(yearAtMost(yearTo));
+        }
+
+        // allOf ANDs every piece, so the extra filters can only narrow the ownership scope.
+        Page<Vehicle> result = vehicleRepository.findAll(Specification.allOf(filters), pageRequest);
+        return PageResponse.from(result, vehicleMapper::toResponseDto);
     }
 
     @Override

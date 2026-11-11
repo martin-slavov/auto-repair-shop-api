@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.exception.handler;
 
 import com.example.auto_repair_shop_api.dto.error.ErrorResponse;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
+import com.example.auto_repair_shop_api.exception.InvalidSortParameterException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
@@ -60,6 +61,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidStateTransitionException.class)
     public ResponseEntity<ErrorResponse> handleInvalidState(InvalidStateTransitionException ex) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    // Unknown sort field or direction on a list endpoint.
+    @ExceptionHandler(InvalidSortParameterException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidSort(InvalidSortParameterException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 

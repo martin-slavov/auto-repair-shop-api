@@ -30,7 +30,7 @@ public record VehicleUpdateDTO(
 ) {
     public VehicleUpdateDTO {
         if (licensePlate != null) {
-            licensePlate = licensePlate.replaceAll("\s+", "").toUpperCase();
+            licensePlate = licensePlate.replaceAll("\\s+", "").toUpperCase();
         }
     }
 }

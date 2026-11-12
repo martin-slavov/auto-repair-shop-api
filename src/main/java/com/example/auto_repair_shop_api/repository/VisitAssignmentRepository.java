@@ -1,8 +1,10 @@
 package com.example.auto_repair_shop_api.repository;
 
 import com.example.auto_repair_shop_api.model.VisitAssignment;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -13,4 +15,7 @@ public interface VisitAssignmentRepository extends JpaRepository<VisitAssignment
     Optional<VisitAssignment> findByServiceVisitIdAndMechanicId(Long serviceVisitId, Long mechanicId);
 
     List<VisitAssignment> findByServiceVisitId(Long serviceVisitId);
+
+    @EntityGraph(attributePaths = "mechanic")
+    List<VisitAssignment> findByServiceVisitIdInOrderByIdAsc(Collection<Long> serviceVisitIds);
 }

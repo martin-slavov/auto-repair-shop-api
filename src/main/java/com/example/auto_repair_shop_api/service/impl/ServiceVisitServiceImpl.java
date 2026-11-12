@@ -1,5 +1,6 @@
 package com.example.auto_repair_shop_api.service.impl;
 
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
@@ -20,16 +21,41 @@ import com.example.auto_repair_shop_api.repository.VisitAssignmentRepository;
 import com.example.auto_repair_shop_api.repository.VisitPartRepository;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
+import com.example.auto_repair_shop_api.util.PageRequestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.assignedToMechanic;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.hasStatus;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.hasVehicleId;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.licensePlateContains;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.scheduledOnOrAfter;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.scheduledOnOrBefore;
+import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.vehicleOwnedBy;
 
 @Service
 public class ServiceVisitServiceImpl implements ServiceVisitService {
+
+    // Sort whitelist: API field name -> entity property.
+    private static final Map<String, String> SORT_FIELDS = Map.of(
+            "scheduledDate", "scheduledDate",
+            "completedDate", "completedDate",
+            "status", "status"
+    );
+    private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "scheduledDate");
 
     private final ServiceVisitRepository serviceVisitRepository;
     private final VisitAssignmentRepository visitAssignmentRepository;
@@ -76,15 +102,59 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     }
 
     @Override
-    public List<ServiceVisitResponseDTO> getVisitsForMechanic(String currentUsername) {
+    public PageResponse<ServiceVisitResponseDTO> getVisitsForCurrentUser(String currentUsername,
+                                                                         VisitStatus status,
+                                                                         LocalDate scheduledFrom, LocalDate scheduledTo,
+                                                                         String licensePlate, Long vehicleId, Long mechanicId,
+                                                                         Integer page, Integer size, String sort) {
 
-        AppUser mechanic = appUserService.getByUsernameOrThrow(currentUsername);
+        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
-        List<VisitAssignment> assignments = visitAssignmentRepository.findByMechanicId(mechanic.getId());
+        if (scheduledFrom != null && scheduledTo != null && scheduledFrom.isAfter(scheduledTo)) {
+            throw new IllegalArgumentException("scheduledFrom must not be after scheduledTo");
+        }
 
-        return assignments.stream()
-                .map(assignment -> serviceVisitMapper.toResponseDto(assignment.getServiceVisit(), assignment))
-                .toList();
+        PageRequest pageRequest = PageRequestFactory.create(page, size, sort, SORT_FIELDS, DEFAULT_SORT);
+
+        List<Specification<ServiceVisit>> filters = new ArrayList<>();
+
+        switch (appUser.getRole()) {
+            case ADMIN -> { }
+            case MECHANIC -> filters.add(assignedToMechanic(appUser.getId()));
+            case CUSTOMER -> filters.add(vehicleOwnedBy(appUser.getId()));
+            default -> throw new IllegalStateException("Unsupported role: " + appUser.getRole());
+        }
+
+        if (status != null) {
+            filters.add(hasStatus(status));
+        }
+        if (scheduledFrom != null) {
+            filters.add(scheduledOnOrAfter(scheduledFrom));
+        }
+        if (scheduledTo != null) {
+            filters.add(scheduledOnOrBefore(scheduledTo));
+        }
+        if (licensePlate != null && !licensePlate.isBlank()) {
+            filters.add(licensePlateContains(licensePlate));
+        }
+        if (vehicleId != null) {
+            filters.add(hasVehicleId(vehicleId));
+        }
+        // Filtering by mechanic is an admin feature; ignored for other roles.
+        if (mechanicId != null && appUser.getRole() == Role.ADMIN) {
+            filters.add(assignedToMechanic(mechanicId));
+        }
+
+        Page<ServiceVisit> result = serviceVisitRepository.findAll(Specification.allOf(filters), pageRequest);
+
+        Map<Long, List<VisitAssignment>> assignmentsByVisitId = result.hasContent()
+                ? visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(
+                                result.getContent().stream().map(ServiceVisit::getId).toList()).stream()
+                        .collect(Collectors.groupingBy(assignment -> assignment.getServiceVisit().getId()))
+                : Map.of();
+
+        return PageResponse.from(result, visit ->
+                serviceVisitMapper.toResponseDto(visit, assignmentsByVisitId.getOrDefault(visit.getId(), List.of())));
     }
 
     @Override

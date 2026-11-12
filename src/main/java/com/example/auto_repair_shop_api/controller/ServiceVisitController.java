@@ -1,21 +1,25 @@
 package com.example.auto_repair_shop_api.controller;
 
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.CompleteVisitDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.UpdateVisitStatusDTO;
+import com.example.auto_repair_shop_api.model.enums.VisitStatus;
 import com.example.auto_repair_shop_api.service.InvoiceService;
 import com.example.auto_repair_shop_api.service.ServiceVisitService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
+import java.time.LocalDate;
 
 @Tag(name = "Service Visits", description = "Mechanic workflow for scheduled visits")
 @RestController
@@ -30,12 +34,34 @@ public class ServiceVisitController {
         this.invoiceService = invoiceService;
     }
 
-    @Operation(summary = "Get all visits assigned to the current mechanic")
+    @Operation(summary = "Search service visits (paged). Admins see all visits, mechanics see visits they are " +
+            "assigned to, customers see visits of their own vehicles.")
     @GetMapping
-    public ResponseEntity<List<ServiceVisitResponseDTO>> getVisitsForMechanic() {
+    public ResponseEntity<PageResponse<ServiceVisitResponseDTO>> getVisitsForCurrentUser(
+            @Parameter(description = "Visit status: SCHEDULED, IN_PROGRESS, COMPLETED, INVOICED")
+            @RequestParam(required = false) VisitStatus status,
+            @Parameter(description = "Scheduled date from, inclusive (yyyy-MM-dd)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate scheduledFrom,
+            @Parameter(description = "Scheduled date to, inclusive (yyyy-MM-dd)")
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate scheduledTo,
+            @Parameter(description = "Vehicle license plate contains (spaces ignored, case-insensitive)")
+            @RequestParam(required = false) String licensePlate,
+            @Parameter(description = "Vehicle ID (still limited to the visits the caller may see)")
+            @RequestParam(required = false) Long vehicleId,
+            @Parameter(description = "Assigned mechanic ID (admin only, ignored for other roles)")
+            @RequestParam(required = false) Long mechanicId,
+            @Parameter(description = "Page number, 0-based (default 0)")
+            @RequestParam(required = false) Integer page,
+            @Parameter(description = "Page size (default 10, max 50)")
+            @RequestParam(required = false) Integer size,
+            @Parameter(description = "field,asc|desc - fields: scheduledDate, completedDate, status " +
+                    "(default scheduledDate,desc)")
+            @RequestParam(required = false) String sort) {
 
-        String name = SecurityUtils.getCurrentUsername();
-        List<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForMechanic(name);
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        PageResponse<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForCurrentUser(
+                currentUsername, status, scheduledFrom, scheduledTo, licensePlate, vehicleId, mechanicId,
+                page, size, sort);
         return ResponseEntity.ok().body(result);
     }
 

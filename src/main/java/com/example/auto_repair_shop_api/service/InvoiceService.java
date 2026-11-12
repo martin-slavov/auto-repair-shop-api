@@ -1,8 +1,10 @@
 package com.example.auto_repair_shop_api.service;
 
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 
-import java.util.List;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public interface InvoiceService {
 
@@ -10,5 +12,9 @@ public interface InvoiceService {
 
     InvoiceResponseDTO markAsPaid(Long invoiceId);
 
-    List<InvoiceResponseDTO> getInvoicesForCurrentUser(String currentUsername);
+    PageResponse<InvoiceResponseDTO> getInvoicesForCurrentUser(String currentUsername,
+                                                               Boolean paid, String invoiceNumber, String licensePlate,
+                                                               LocalDate issuedFrom, LocalDate issuedTo,
+                                                               BigDecimal minTotal, BigDecimal maxTotal, Long ownerId,
+                                                               Integer page, Integer size, String sort);
 }

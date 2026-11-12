@@ -24,10 +24,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.example.auto_repair_shop_api.repository.specification.InvoiceSpecifications.invoiceNumberContains;
 import static com.example.auto_repair_shop_api.repository.specification.InvoiceSpecifications.isPaid;
@@ -41,7 +43,7 @@ import static com.example.auto_repair_shop_api.repository.specification.InvoiceS
 @Service
 public class InvoiceServiceImpl implements InvoiceService {
 
-    private static final BigDecimal HOURLY_RATE = BigDecimal.valueOf(30.00);
+    private static final BigDecimal HOURLY_RATE = new BigDecimal("30.00");
 
     // Sort whitelist: API field name -> entity property. All four columns are NOT NULL.
     private static final Map<String, String> SORT_FIELDS = Map.of(
@@ -91,6 +93,9 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoice.setTotalPrice(partsPrice.add(laborPrice));
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
+
+        serviceVisit.setStatus(VisitStatus.INVOICED);
+        serviceVisitRepository.save(serviceVisit);
 
         return invoiceMapper.toResponseDto(savedInvoice);
     }
@@ -170,7 +175,9 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         return parts.stream()
                 .map(VisitPart::getPriceAtTimeOfUse)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal calculateLaborPrice(Long visitId) {
@@ -178,8 +185,9 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         BigDecimal totalHours = assignments.stream()
                 .map(VisitAssignment::getHoursWorked)
+                .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return HOURLY_RATE.multiply(totalHours);
+        return HOURLY_RATE.multiply(totalHours).setScale(2, RoundingMode.HALF_UP);
     }
 }

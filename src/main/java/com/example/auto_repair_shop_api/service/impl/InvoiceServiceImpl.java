@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
+import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.InvoiceMapper;
 import com.example.auto_repair_shop_api.model.*;
@@ -104,8 +105,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     @Transactional
     public InvoiceResponseDTO markAsPaid(Long invoiceId) {
 
-        Invoice invoice = invoiceRepository.findById(invoiceId)
-                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
+        Invoice invoice = getInvoiceOrThrow(invoiceId);
 
         if (invoice.isPaid()) {
             throw new InvalidStateTransitionException("Invoice is already paid");
@@ -115,6 +115,39 @@ public class InvoiceServiceImpl implements InvoiceService {
         invoiceRepository.save(invoice);
 
         return invoiceMapper.toResponseDto(invoice);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public InvoiceResponseDTO getInvoiceById(Long invoiceId, String currentUsername) {
+
+        AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
+        Invoice invoice = getInvoiceOrThrow(invoiceId);
+
+        boolean isAdmin = appUser.getRole() == Role.ADMIN;
+        boolean isOwner = invoice.getVisit().getVehicle().getOwner().getId().equals(appUser.getId());
+        if (!isAdmin && !isOwner) {
+            throw new OwnershipViolationException("You do not have permission to view this invoice");
+        }
+
+        return invoiceMapper.toResponseDto(invoice);
+    }
+
+    @Override
+    @Transactional
+    public void deleteInvoice(Long invoiceId) {
+
+        Invoice invoice = getInvoiceOrThrow(invoiceId);
+
+        if (invoice.isPaid()) {
+            throw new InvalidStateTransitionException("Paid invoice cannot be deleted");
+        }
+
+        ServiceVisit serviceVisit = invoice.getVisit();
+        serviceVisit.setStatus(VisitStatus.COMPLETED);
+        serviceVisitRepository.save(serviceVisit);
+
+        invoiceRepository.delete(invoice);
     }
 
     @Override
@@ -168,6 +201,11 @@ public class InvoiceServiceImpl implements InvoiceService {
 
         Page<Invoice> result = invoiceRepository.findAll(Specification.allOf(filters), pageRequest);
         return PageResponse.from(result, invoiceMapper::toResponseDto);
+    }
+
+    private Invoice getInvoiceOrThrow(Long invoiceId) {
+        return invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new ResourceNotFoundException("Invoice not found"));
     }
 
     private BigDecimal calculatePartsPrice(Long visitId) {

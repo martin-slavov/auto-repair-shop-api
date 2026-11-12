@@ -12,6 +12,10 @@ public interface InvoiceService {
 
     InvoiceResponseDTO markAsPaid(Long invoiceId);
 
+    InvoiceResponseDTO getInvoiceById(Long invoiceId, String currentUsername);
+
+    void deleteInvoice(Long invoiceId);
+
     PageResponse<InvoiceResponseDTO> getInvoicesForCurrentUser(String currentUsername,
                                                                Boolean paid, String invoiceNumber, String licensePlate,
                                                                LocalDate issuedFrom, LocalDate issuedTo,

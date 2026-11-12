@@ -60,6 +60,23 @@ public class InvoiceController {
         return ResponseEntity.ok(result);
     }
 
+    @Operation(summary = "Get an invoice by ID (admin: any; customer: own vehicles only)")
+    @GetMapping("/{id}")
+    public ResponseEntity<InvoiceResponseDTO> getInvoiceById(@PathVariable Long id) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        InvoiceResponseDTO result = invoiceService.getInvoiceById(id, currentUsername);
+        return ResponseEntity.ok(result);
+    }
+
+    @Operation(summary = "Delete an unpaid invoice (admin only); the visit goes back to COMPLETED")
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteInvoice(@PathVariable Long id) {
+
+        invoiceService.deleteInvoice(id);
+        return ResponseEntity.noContent().build();
+    }
+
     @Operation(summary = "Mark an invoice as paid (admin only)")
     @PatchMapping("/{id}/pay")
     public ResponseEntity<InvoiceResponseDTO> payInvoice(@PathVariable Long id) {

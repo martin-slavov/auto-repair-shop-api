@@ -56,6 +56,10 @@ public class VisitPartServiceImpl implements VisitPartService {
 
         Part part = partRepository.findById(dto.partId()).orElseThrow(() -> new ResourceNotFoundException("Part not found"));
 
+        if (!Boolean.TRUE.equals(part.getActive())) {
+            throw new IllegalArgumentException("Part is not active");
+        }
+
         VisitPart visitPart = new VisitPart();
         visitPart.setServiceVisit(assignment.getServiceVisit());
         visitPart.setPart(part);

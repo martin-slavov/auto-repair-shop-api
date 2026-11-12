@@ -23,6 +23,7 @@ public class PartMapper {
         return new PartCatalogDTO(
                 part.getId(),
                 part.getName(),
+                part.getSerialNumber(),
                 part.getUnitSellPrice(),
                 part.getActive()
         );

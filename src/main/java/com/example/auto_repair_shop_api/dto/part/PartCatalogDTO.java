@@ -5,7 +5,8 @@ import java.math.BigDecimal;
 public record PartCatalogDTO(
         Long id,
         String name,
+        String serialNumber,
         BigDecimal unitSellPrice,
         Boolean active
-) {
+) implements PartView {
 }

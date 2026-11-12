@@ -9,5 +9,5 @@ public record PartResponseDTO(
         BigDecimal unitCost,
         BigDecimal unitSellPrice,
         Boolean active
-) {
+) implements PartView {
 }

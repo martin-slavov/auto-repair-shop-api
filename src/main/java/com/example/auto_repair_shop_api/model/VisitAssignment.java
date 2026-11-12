@@ -24,8 +24,8 @@ public class VisitAssignment {
     @JoinColumn(name = "mechanic_id", nullable = false)
     private AppUser mechanic;
 
-    @Column(name = "hours_worked", precision = 5, scale = 2)
-    private BigDecimal hoursWorked;
+    @Column(name = "hours_worked", nullable = false, precision = 5, scale = 2)
+    private BigDecimal hoursWorked = BigDecimal.ZERO.setScale(2);
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role_in_visit", nullable = false)

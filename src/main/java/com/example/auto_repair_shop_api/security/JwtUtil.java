@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Optional;
 
 @Component
 public class JwtUtil {
@@ -60,6 +61,19 @@ public class JwtUtil {
             return true;
         } catch (JwtException e) {
             return false;
+        }
+    }
+
+    public Optional<String> extractValidUsername(String token) {
+        try {
+            return Optional.ofNullable(Jwts.parser()
+                    .verifyWith(getSigningKey())
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload()
+                    .getSubject());
+        } catch (JwtException | IllegalArgumentException e) {
+            return Optional.empty();
         }
     }
 

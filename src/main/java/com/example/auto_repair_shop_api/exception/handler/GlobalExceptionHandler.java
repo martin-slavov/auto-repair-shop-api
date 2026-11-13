@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.validation.FieldError;
@@ -75,7 +76,8 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
-    @ExceptionHandler({UsernameNotFoundException.class, BadCredentialsException.class})
+    // DisabledException gets the same answer so a response never reveals that an account exists.
+    @ExceptionHandler({UsernameNotFoundException.class, BadCredentialsException.class, DisabledException.class})
     public ResponseEntity<ErrorResponse> handleAuthenticationFailure(Exception ex) {
         return build(HttpStatus.UNAUTHORIZED, "Invalid username or password");
     }

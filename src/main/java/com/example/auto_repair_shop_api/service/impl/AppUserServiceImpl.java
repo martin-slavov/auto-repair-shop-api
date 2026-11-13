@@ -39,10 +39,12 @@ public class AppUserServiceImpl implements AppUserService {
 
         AppUser appUser = getByUsernameOrThrow(username);
 
-        return new User(
-                appUser.getUsername(),
-                appUser.getPasswordHash(),
-                List.of(new SimpleGrantedAuthority("ROLE_" + appUser.getRole().name())));
+        return User.builder()
+                .username(appUser.getUsername())
+                .password(appUser.getPasswordHash())
+                .authorities(new SimpleGrantedAuthority("ROLE_" + appUser.getRole().name()))
+                .disabled(!appUser.isEnabled())
+                .build();
     }
 
     @Override

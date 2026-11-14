@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service;
 import com.example.auto_repair_shop_api.dto.auth.RegisterRequestDTO;
 import com.example.auto_repair_shop_api.dto.auth.RegisterResponseDTO;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.user.ChangePasswordDTO;
 import com.example.auto_repair_shop_api.dto.user.UpdateUserEnabledDTO;
 import com.example.auto_repair_shop_api.dto.user.UserAdminDTO;
 import com.example.auto_repair_shop_api.model.AppUser;
@@ -25,4 +26,6 @@ public interface AppUserService extends UserDetailsService {
                                            Integer page, Integer size, String sort);
 
     UserAdminDTO updateEnabled(Long id, UpdateUserEnabledDTO dto, String currentUsername);
+
+    void changePassword(String currentUsername, ChangePasswordDTO dto);
 }

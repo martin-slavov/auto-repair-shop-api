@@ -3,6 +3,7 @@ package com.example.auto_repair_shop_api.service.impl;
 import com.example.auto_repair_shop_api.dto.auth.RegisterRequestDTO;
 import com.example.auto_repair_shop_api.dto.auth.RegisterResponseDTO;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.user.ChangePasswordDTO;
 import com.example.auto_repair_shop_api.dto.user.UpdateUserEnabledDTO;
 import com.example.auto_repair_shop_api.dto.user.UserAdminDTO;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
@@ -149,6 +150,21 @@ public class AppUserServiceImpl implements AppUserService {
 
         target.setEnabled(enabled);
         return appUserMapper.toAdminDto(target);
+    }
+
+    @Override
+    @Transactional
+    public void changePassword(String currentUsername, ChangePasswordDTO dto) {
+        AppUser appUser = getByUsernameOrThrow(currentUsername);
+
+        if (!passwordEncoder.matches(dto.currentPassword(), appUser.getPasswordHash())) {
+            throw new IllegalArgumentException("Current password is incorrect");
+        }
+        if (dto.newPassword().equals(dto.currentPassword())) {
+            throw new IllegalArgumentException("New password must be different from the current password");
+        }
+
+        appUser.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
     }
 
     private boolean isSameUser(AppUser target, String currentUsername) {

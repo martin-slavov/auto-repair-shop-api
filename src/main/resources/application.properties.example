@@ -19,3 +19,8 @@ spring.mail.username=your_mailtrap_username
 spring.mail.password=your_mailtrap_password
 spring.mail.properties.mail.smtp.auth=true
 spring.mail.properties.mail.smtp.starttls.enable=true
+
+app.cors.allowed-origins=http://localhost:5173
+
+springdoc.api-docs.enabled=true
+springdoc.swagger-ui.enabled=true

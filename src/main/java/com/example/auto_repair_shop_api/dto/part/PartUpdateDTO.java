@@ -14,12 +14,12 @@ public record PartUpdateDTO(
         String serialNumber,
 
         @NotNull(message = "Unit cost is required")
-        @PositiveOrZero(message = "Unit cost must be greater than zero")
+        @Positive(message = "Unit cost must be greater than zero")
         @Digits(integer = 6, fraction = 2, message = "Unit cost must have up to 6 digits and 2 decimal places")
         BigDecimal unitCost,
 
         @NotNull(message = "Unit sell price is required")
-        @PositiveOrZero(message = "Unit sell price must be greater than zero")
+        @Positive(message = "Unit sell price must be greater than zero")
         @Digits(integer = 6, fraction = 2, message = "Unit sell price must have up to 6 digits and 2 decimal places")
         BigDecimal unitSellPrice,
 

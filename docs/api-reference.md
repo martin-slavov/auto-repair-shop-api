@@ -151,7 +151,6 @@ Every error produced by the application has this shape:
   - `LoginRequestDTO`: `username`, `password`
   - `RegisterRequestDTO`: `password` (blank only)
   - `ChangePasswordDTO`: `newPassword` (blank only)
-  - `PartCreateDTO`: all fields
   - `VisitPartCreateDTO`: all fields
 
   To get English, send `Accept-Language: en`, or map these fields to your own texts.
@@ -579,8 +578,8 @@ The vehicle of a request cannot be changed.
 |-------|------|----------|--------|-------|
 | `name` | string | yes | max 100 | |
 | `serialNumber` | string | yes | max 60 | unique (409) |
-| `unitCost` | decimal | yes | — | > 0 (no `@Digits` here) |
-| `unitSellPrice` | decimal | yes | — | > 0 (no `@Digits` here) |
+| `unitCost` | decimal | yes | — | > 0; `@Digits(6, 2)` |
+| `unitSellPrice` | decimal | yes | — | > 0; `@Digits(6, 2)` |
 
 ### 5.13 PartUpdateDTO
 
@@ -588,14 +587,14 @@ The vehicle of a request cannot be changed.
 |-------|------|----------|--------|-------|
 | `name` | string | yes | max 100 | |
 | `serialNumber` | string | yes | max 60 | unique (409) |
-| `unitCost` | decimal | yes | — | ≥ 0; `@Digits(6, 2)` |
-| `unitSellPrice` | decimal | yes | — | ≥ 0; `@Digits(6, 2)` |
+| `unitCost` | decimal | yes | — | > 0; `@Digits(6, 2)` |
+| `unitSellPrice` | decimal | yes | — | > 0; `@Digits(6, 2)` |
 | `active` | boolean | yes | — | |
 
-Create requires > 0, but update allows 0 (the update message still says "must be greater than zero").
-Both price columns are `DECIMAL(8, 2)` with `>= 0` in the database (migration `V7__create_part_table.sql`), so
-the real limit is **0 … 999999.99 with at most 2 decimals**. Create does not validate the digits, so apply this
-limit in the form for create as well (see "known issues" in section 7).
+Create and update use the same price rules: **0.01 … 999999.99 with at most 2 decimals**, which fits the
+`DECIMAL(8, 2)` columns (migration `V7__create_part_table.sql`). Messages: `"Unit cost is required"`,
+`"Unit cost must be greater than zero"`, `"Unit cost must have up to 6 digits and 2 decimal places"` (and the
+same for "Unit sell price"). A part saved earlier with a price of 0 must get a price above 0 before it can be updated.
 
 ### 5.14 VisitPartCreateDTO
 
@@ -699,10 +698,6 @@ limit in the form for create as well (see "known issues" in section 7).
 - **Service request update** replaces `preferredDate`. Always send the current value, or it is cleared.
 - **License plates** are stored without spaces and in upper case. `maxLength` 8 applies after removing spaces.
 - **Known issues (to be fixed)**. Work around these in the frontend for now:
-  - **Part validation differs between create and update.** `PartCreateDTO` requires `unitCost` and
-    `unitSellPrice` > 0 and does not check digits. `PartUpdateDTO` allows 0, checks `@Digits(6, 2)`, and its
-    message wrongly says "must be greater than zero". The database column is `DECIMAL(8, 2)`, `>= 0`. Use
-    0.01 … 999999.99 with 2 decimals for both forms.
   - **Approve does not check that the mechanic is enabled.** A disabled mechanic's id in
     `PATCH /approve` is accepted. Offer only enabled mechanics (`GET /api/admin/users?role=MECHANIC&enabled=true`).
   - **Approve does not check that `scheduledDate` is not in the past** (unlike `PUT /api/service-visits/{id}`,

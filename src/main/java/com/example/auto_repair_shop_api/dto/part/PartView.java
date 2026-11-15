@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  * A part as returned by GET /api/parts: the full PartResponseDTO for admins,
  * or the PartCatalogDTO (without unitCost) for mechanics.
  */
-@Schema(oneOf = {PartResponseDTO.class, PartCatalogDTO.class})
+@Schema(oneOf = {PartResponseDTO.class, PartCatalogDTO.class},
+        description = "ADMIN gets PartResponseDTO (with unitCost), MECHANIC gets PartCatalogDTO")
 public sealed interface PartView permits PartResponseDTO, PartCatalogDTO {
 }

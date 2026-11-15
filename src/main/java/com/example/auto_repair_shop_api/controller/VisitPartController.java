@@ -6,6 +6,9 @@ import com.example.auto_repair_shop_api.dto.visitpart.VisitPartUpdateDTO;
 import com.example.auto_repair_shop_api.service.VisitPartService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,7 +28,11 @@ public class VisitPartController {
         this.visitPartService = visitPartService;
     }
 
-    @Operation(summary = "Add a part to a visit (assigned mechanic only, visit must be in progress)")
+    @Operation(summary = "Add a part to a visit",
+            description = "Access: MECHANIC. Only a mechanic assigned to the visit, while the visit is IN_PROGRESS; " +
+                    "the part must be active.")
+    @ApiResponse(responseCode = "201", description = "Part line added",
+            content = @Content(schema = @Schema(implementation = VisitPartResponseDTO.class)))
     @PostMapping
     public ResponseEntity<VisitPartResponseDTO> addPartToVisit(@PathVariable Long id, @Valid @RequestBody VisitPartCreateDTO visitPartCreateDTO) {
 
@@ -35,7 +42,8 @@ public class VisitPartController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
-    @Operation(summary = "Get all parts used in a visit")
+    @Operation(summary = "List the parts used in a visit",
+            description = "Access: ADMIN, MECHANIC. Mechanics must be assigned to the visit.")
     @GetMapping
     public ResponseEntity<List<VisitPartResponseDTO>> getPartsForVisit(@PathVariable Long id) {
 
@@ -45,7 +53,9 @@ public class VisitPartController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Change the quantity of a part line (admin or assigned mechanic, visit not completed)")
+    @Operation(summary = "Change the quantity of a part line",
+            description = "Access: ADMIN, MECHANIC. Mechanics must be assigned to the visit; " +
+                    "not allowed once the visit is COMPLETED or INVOICED.")
     @PutMapping("/{partLineId}")
     public ResponseEntity<VisitPartResponseDTO> updateVisitPart(@PathVariable Long id, @PathVariable Long partLineId,
                                                                 @Valid @RequestBody VisitPartUpdateDTO dto) {
@@ -56,7 +66,10 @@ public class VisitPartController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Remove a part line from a visit (admin or assigned mechanic, visit not completed)")
+    @Operation(summary = "Remove a part line from a visit",
+            description = "Access: ADMIN, MECHANIC. Mechanics must be assigned to the visit; " +
+                    "not allowed once the visit is COMPLETED or INVOICED.")
+    @ApiResponse(responseCode = "204", description = "Part line removed")
     @DeleteMapping("/{partLineId}")
     public ResponseEntity<Void> deleteVisitPart(@PathVariable Long id, @PathVariable Long partLineId) {
 

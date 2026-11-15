@@ -12,6 +12,9 @@ import com.example.auto_repair_shop_api.service.ServiceVisitService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -21,7 +24,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 
-@Tag(name = "Service Visits", description = "Mechanic workflow for scheduled visits")
+@Tag(name = "Service Visits", description = "Service visit workflow: admins reschedule, delete and invoice visits, " +
+        "mechanics work on their assigned visits, customers view the visits of their own vehicles")
 @RestController
 @RequestMapping("/api/service-visits")
 public class ServiceVisitController {
@@ -34,8 +38,9 @@ public class ServiceVisitController {
         this.invoiceService = invoiceService;
     }
 
-    @Operation(summary = "Search service visits (paged). Admins see all visits, mechanics see visits they are " +
-            "assigned to, customers see visits of their own vehicles.")
+    @Operation(summary = "Search service visits (paged)",
+            description = "Access: ADMIN, MECHANIC, CUSTOMER. Admins see all visits, mechanics see visits they are " +
+                    "assigned to, customers see visits of their own vehicles.")
     @GetMapping
     public ResponseEntity<PageResponse<ServiceVisitResponseDTO>> getVisitsForCurrentUser(
             @Parameter(description = "Visit status: SCHEDULED, IN_PROGRESS, COMPLETED, INVOICED")
@@ -65,7 +70,9 @@ public class ServiceVisitController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Update visit status (for instance: from SCHEDULED to IN_PROGRESS)")
+    @Operation(summary = "Update visit status",
+            description = "Access: MECHANIC. Only a mechanic assigned to the visit; the only allowed transition " +
+                    "is SCHEDULED to IN_PROGRESS.")
     @PatchMapping("/{id}/status")
     public ResponseEntity<ServiceVisitResponseDTO> updateVisitStatus(@Valid @RequestBody UpdateVisitStatusDTO dto, @PathVariable Long id) {
 
@@ -74,7 +81,9 @@ public class ServiceVisitController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Complete a visit with technical notes and hours worked")
+    @Operation(summary = "Complete a visit",
+            description = "Access: MECHANIC. Only the lead mechanic of the visit, while it is IN_PROGRESS. " +
+                    "Records the technical notes and hours worked.")
     @PatchMapping("/{id}/complete")
     public ResponseEntity<ServiceVisitResponseDTO> completeVisit(@PathVariable Long id, @Valid @RequestBody CompleteVisitDTO dto) {
 
@@ -83,7 +92,10 @@ public class ServiceVisitController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Generate an invoice for a completed visit (admin only)")
+    @Operation(summary = "Generate an invoice for a visit",
+            description = "Access: ADMIN. The visit must be COMPLETED.")
+    @ApiResponse(responseCode = "201", description = "Invoice created",
+            content = @Content(schema = @Schema(implementation = InvoiceResponseDTO.class)))
     @PatchMapping("/{id}/invoice")
     public ResponseEntity<InvoiceResponseDTO> createInvoice(@PathVariable Long id) {
 
@@ -91,7 +103,7 @@ public class ServiceVisitController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
-    @Operation(summary = "Reschedule a scheduled visit (admin only)")
+    @Operation(summary = "Reschedule a visit", description = "Access: ADMIN. Only SCHEDULED visits.")
     @PutMapping("/{id}")
     public ResponseEntity<ServiceVisitResponseDTO> updateVisit(@PathVariable Long id, @Valid @RequestBody ServiceVisitUpdateDTO dto) {
 
@@ -99,7 +111,9 @@ public class ServiceVisitController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Delete a scheduled visit without parts (admin only); the request goes back to PENDING")
+    @Operation(summary = "Delete a visit",
+            description = "Access: ADMIN. Only a SCHEDULED visit without parts; the request goes back to PENDING.")
+    @ApiResponse(responseCode = "204", description = "Visit deleted")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteVisit(@PathVariable Long id) {
 

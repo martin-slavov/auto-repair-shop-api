@@ -9,6 +9,9 @@ import com.example.auto_repair_shop_api.service.PartService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -28,15 +31,18 @@ public class PartController {
         this.partService = partService;
     }
 
-    @Operation(summary = "Add a new part to the catalog (admin only)")
+    @Operation(summary = "Add a part to the catalog", description = "Access: ADMIN.")
+    @ApiResponse(responseCode = "201", description = "Part created",
+            content = @Content(schema = @Schema(implementation = PartResponseDTO.class)))
     @PostMapping
     public ResponseEntity<PartResponseDTO> createPart(@Valid @RequestBody PartCreateDTO partCreateDTO) {
         PartResponseDTO response = partService.createPart(partCreateDTO);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Search the parts catalog (paged). Admins get full details (PartResponseDTO) and see all parts; " +
-            "mechanics get PartCatalogDTO (no unit cost) and see active parts only.")
+    @Operation(summary = "Search the parts catalog (paged)",
+            description = "Access: ADMIN, MECHANIC. Admins get full details (PartResponseDTO) and see all parts; " +
+                    "mechanics get PartCatalogDTO (no unit cost) and see active parts only.")
     @GetMapping
     public ResponseEntity<PageResponse<PartView>> getParts(
             @Parameter(description = "Name contains (case-insensitive)")
@@ -63,7 +69,7 @@ public class PartController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Update a part (admin only)")
+    @Operation(summary = "Update a part", description = "Access: ADMIN.")
     @PutMapping("/{id}")
     public ResponseEntity<PartResponseDTO> updatePart(@PathVariable Long id, @Valid @RequestBody PartUpdateDTO partUpdateDTO) {
 
@@ -71,7 +77,9 @@ public class PartController {
         return ResponseEntity.ok().body(response);
     }
 
-    @Operation(summary = "Delete a part (admin only); fails if the part is used in a service visit")
+    @Operation(summary = "Delete a part",
+            description = "Access: ADMIN. Fails if the part is used in a service visit.")
+    @ApiResponse(responseCode = "204", description = "Part deleted")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePart(@PathVariable Long id) {
 

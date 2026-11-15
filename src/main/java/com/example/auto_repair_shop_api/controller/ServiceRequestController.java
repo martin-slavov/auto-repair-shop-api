@@ -11,6 +11,9 @@ import com.example.auto_repair_shop_api.service.ServiceRequestService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -31,7 +34,10 @@ public class ServiceRequestController {
         this.serviceRequestService = serviceRequestService;
     }
 
-    @Operation(summary = "Submit a new service request for a customer's vehicle")
+    @Operation(summary = "Submit a service request",
+            description = "Access: CUSTOMER. The vehicle must belong to the caller.")
+    @ApiResponse(responseCode = "201", description = "Service request created",
+            content = @Content(schema = @Schema(implementation = ServiceRequestResponseDTO.class)))
     @PostMapping
     public ResponseEntity<ServiceRequestResponseDTO> createServiceRequest(@Valid @RequestBody ServiceRequestCreateDTO dto) {
 
@@ -40,8 +46,9 @@ public class ServiceRequestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
-    @Operation(summary = "Search service requests (paged). Customers see requests for their own vehicles; " +
-            "admins see all requests in every status.")
+    @Operation(summary = "Search service requests (paged)",
+            description = "Access: CUSTOMER, ADMIN. Customers see requests for their own vehicles; " +
+                    "admins see all requests in every status.")
     @GetMapping
     public ResponseEntity<PageResponse<ServiceRequestResponseDTO>> getServiceRequestsForCurrentUser(
             @Parameter(description = "Request status: PENDING, APPROVED, REJECTED")
@@ -70,7 +77,8 @@ public class ServiceRequestController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Approve a pending service request and assign a mechanic (admin only)")
+    @Operation(summary = "Approve a service request",
+            description = "Access: ADMIN. Only PENDING requests; approving assigns a mechanic.")
     @PatchMapping("/{id}/approve")
     public ResponseEntity<ServiceRequestResponseDTO> approveServiceRequest(@PathVariable Long id, @Valid @RequestBody ApproveRequestDTO dto) {
 
@@ -78,7 +86,7 @@ public class ServiceRequestController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Reject a pending service request (admin only)")
+    @Operation(summary = "Reject a service request", description = "Access: ADMIN. Only PENDING requests.")
     @PatchMapping("/{id}/reject")
     public ResponseEntity<ServiceRequestResponseDTO> rejectServiceRequest(@PathVariable Long id) {
 
@@ -86,7 +94,9 @@ public class ServiceRequestController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Update a pending service request (owner or admin)")
+    @Operation(summary = "Update a service request",
+            description = "Access: CUSTOMER, ADMIN. Customers may only change requests for their own vehicles; " +
+                    "only PENDING requests can be changed.")
     @PutMapping("/{id}")
     public ResponseEntity<ServiceRequestResponseDTO> updateServiceRequest(@PathVariable Long id,
                                                                           @Valid @RequestBody ServiceRequestUpdateDTO dto) {
@@ -96,7 +106,10 @@ public class ServiceRequestController {
         return ResponseEntity.ok().body(result);
     }
 
-    @Operation(summary = "Delete a pending service request (owner or admin)")
+    @Operation(summary = "Delete a service request",
+            description = "Access: CUSTOMER, ADMIN. Customers may only delete requests for their own vehicles; " +
+                    "only PENDING requests can be deleted.")
+    @ApiResponse(responseCode = "204", description = "Service request deleted")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteServiceRequest(@PathVariable Long id) {
 

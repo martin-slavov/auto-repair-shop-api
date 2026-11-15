@@ -10,6 +10,9 @@ import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -34,7 +37,9 @@ public class AdminController {
         this.appUserService = appUserService;
     }
 
-    @Operation(summary = "Create a new mechanic account (admin only)")
+    @Operation(summary = "Create a mechanic account", description = "Access: ADMIN.")
+    @ApiResponse(responseCode = "201", description = "Mechanic account created",
+            content = @Content(schema = @Schema(implementation = RegisterResponseDTO.class)))
     @PostMapping("/users/mechanic")
     public ResponseEntity<RegisterResponseDTO> createMechanic(@Valid @RequestBody RegisterRequestDTO dto) {
 
@@ -42,7 +47,9 @@ public class AdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Create a new admin account (admin only)")
+    @Operation(summary = "Create an admin account", description = "Access: ADMIN.")
+    @ApiResponse(responseCode = "201", description = "Admin account created",
+            content = @Content(schema = @Schema(implementation = RegisterResponseDTO.class)))
     @PostMapping("/users/admin")
     public ResponseEntity<RegisterResponseDTO> createAdmin(@Valid @RequestBody RegisterRequestDTO dto) {
 
@@ -50,7 +57,8 @@ public class AdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Search users (paged, admin only). Roles are fixed at creation.")
+    @Operation(summary = "Search users (paged)",
+            description = "Access: ADMIN. Roles are fixed at creation.")
     @GetMapping("/users")
     public ResponseEntity<PageResponse<UserAdminDTO>> getUsers(
             @Parameter(description = "Username contains (case-insensitive)")
@@ -75,7 +83,8 @@ public class AdminController {
         return ResponseEntity.ok().body(response);
     }
 
-    @Operation(summary = "Enable or disable a user; you cannot disable yourself or the last enabled admin")
+    @Operation(summary = "Enable or disable a user",
+            description = "Access: ADMIN. You cannot disable yourself or the last enabled admin.")
     @PatchMapping("/users/{id}/enabled")
     public ResponseEntity<UserAdminDTO> updateEnabled(@PathVariable Long id,
                                                       @Valid @RequestBody UpdateUserEnabledDTO dto) {

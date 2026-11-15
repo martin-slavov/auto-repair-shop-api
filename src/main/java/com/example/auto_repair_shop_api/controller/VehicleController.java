@@ -8,6 +8,9 @@ import com.example.auto_repair_shop_api.service.VehicleService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -25,7 +28,10 @@ public class VehicleController {
         this.vehicleService = vehicleService;
     }
 
-    @Operation(summary = "Create a new vehicle for the current customer")
+    @Operation(summary = "Create a vehicle",
+            description = "Access: CUSTOMER. The vehicle is registered to the caller.")
+    @ApiResponse(responseCode = "201", description = "Vehicle created",
+            content = @Content(schema = @Schema(implementation = VehicleResponseDTO.class)))
     @PostMapping
     public ResponseEntity<VehicleResponseDTO> createVehicle(@Valid @RequestBody VehicleCreateDTO vehicle) {
 
@@ -35,8 +41,9 @@ public class VehicleController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @Operation(summary = "Search vehicles (paged). Customers see only their own vehicles; admins see all " +
-            "and can filter by 'ownerId'.")
+    @Operation(summary = "Search vehicles (paged)",
+            description = "Access: CUSTOMER, ADMIN. Customers see only their own vehicles; admins see all " +
+                    "and can filter by 'ownerId'.")
     @GetMapping
     public ResponseEntity<PageResponse<VehicleResponseDTO>> getVehicles(
             @Parameter(description = "License plate contains (spaces ignored, case-insensitive)")
@@ -66,7 +73,8 @@ public class VehicleController {
         return ResponseEntity.ok().body(response);
     }
 
-    @Operation(summary = "Get a specific vehicle by ID")
+    @Operation(summary = "Get a vehicle by ID",
+            description = "Access: CUSTOMER, ADMIN. Customers can only see their own vehicles.")
     @GetMapping("/{id}")
     public ResponseEntity<VehicleResponseDTO> getVehicleById(@PathVariable Long id) {
 
@@ -76,7 +84,8 @@ public class VehicleController {
         return ResponseEntity.ok().body(response);
     }
 
-    @Operation(summary = "Update a vehicle (owner or admin)")
+    @Operation(summary = "Update a vehicle",
+            description = "Access: CUSTOMER, ADMIN. Customers may only update their own vehicles.")
     @PutMapping("/{id}")
     public ResponseEntity<VehicleResponseDTO> updateVehicle(@PathVariable Long id, @Valid @RequestBody VehicleUpdateDTO vehicle) {
 
@@ -86,7 +95,10 @@ public class VehicleController {
         return ResponseEntity.ok().body(response);
     }
 
-    @Operation(summary = "Delete a vehicle (owner or admin); fails if it has service requests or visits")
+    @Operation(summary = "Delete a vehicle",
+            description = "Access: CUSTOMER, ADMIN. Customers may only delete their own vehicles; " +
+                    "fails if the vehicle has service requests or visits.")
+    @ApiResponse(responseCode = "204", description = "Vehicle deleted")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteVehicle(@PathVariable Long id) {
 

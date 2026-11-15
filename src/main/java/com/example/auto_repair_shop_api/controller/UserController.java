@@ -4,6 +4,7 @@ import com.example.auto_repair_shop_api.dto.user.ChangePasswordDTO;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -23,8 +24,10 @@ public class UserController {
         this.appUserService = appUserService;
     }
 
-    @Operation(summary = "Change the current user's own password (requires the current password). " +
-            "Tokens issued before the change stay valid until they expire.")
+    @Operation(summary = "Change your own password",
+            description = "Access: any authenticated user. Requires the current password. " +
+                    "Tokens issued before the change stay valid until they expire.")
+    @ApiResponse(responseCode = "204", description = "Password changed")
     @PatchMapping("/me/password")
     public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordDTO dto) {
 

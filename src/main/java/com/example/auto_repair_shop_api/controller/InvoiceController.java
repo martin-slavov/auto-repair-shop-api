@@ -6,6 +6,7 @@ import com.example.auto_repair_shop_api.service.InvoiceService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -25,8 +26,9 @@ public class InvoiceController {
         this.invoiceService = invoiceService;
     }
 
-    @Operation(summary = "Search invoices (paged). Customers see invoices for their own vehicles; " +
-            "admins see all invoices and can filter by 'ownerId'.")
+    @Operation(summary = "Search invoices (paged)",
+            description = "Access: CUSTOMER, ADMIN. Customers see invoices for their own vehicles; " +
+                    "admins see all invoices and can filter by 'ownerId'.")
     @GetMapping
     public ResponseEntity<PageResponse<InvoiceResponseDTO>> getInvoicesForCurrentUser(
             @Parameter(description = "Paid state: true or false")
@@ -60,7 +62,8 @@ public class InvoiceController {
         return ResponseEntity.ok(result);
     }
 
-    @Operation(summary = "Get an invoice by ID (admin: any; customer: own vehicles only)")
+    @Operation(summary = "Get an invoice by ID",
+            description = "Access: CUSTOMER, ADMIN. Customers can only see invoices for their own vehicles.")
     @GetMapping("/{id}")
     public ResponseEntity<InvoiceResponseDTO> getInvoiceById(@PathVariable Long id) {
 
@@ -69,7 +72,9 @@ public class InvoiceController {
         return ResponseEntity.ok(result);
     }
 
-    @Operation(summary = "Delete an unpaid invoice (admin only); the visit goes back to COMPLETED")
+    @Operation(summary = "Delete an unpaid invoice",
+            description = "Access: ADMIN. Paid invoices cannot be deleted; the visit goes back to COMPLETED.")
+    @ApiResponse(responseCode = "204", description = "Invoice deleted")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteInvoice(@PathVariable Long id) {
 
@@ -77,7 +82,8 @@ public class InvoiceController {
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary = "Mark an invoice as paid (admin only)")
+    @Operation(summary = "Mark an invoice as paid",
+            description = "Access: ADMIN. Fails if the invoice is already paid.")
     @PatchMapping("/{id}/pay")
     public ResponseEntity<InvoiceResponseDTO> payInvoice(@PathVariable Long id) {
 

@@ -165,7 +165,7 @@ Every error produced by the application has this shape:
 | `400` | Bad `sort` value | `"Unknown sort field 'price'. Allowed: ..."` |
 | `400` | Range filter inverted | `"yearFrom must not be greater than yearTo"`, `"issuedFrom must not be after issuedTo"` |
 | `400` | Action not allowed in the current status | `"Only pending requests can be approved"`, `"Invalid status transition"`, `"Visit status must be COMPLETED"` |
-| `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Current password is incorrect"`, `"You cannot disable your own account"` |
+| `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Mechanic account is disabled"`, `"Current password is incorrect"`, `"You cannot disable your own account"` |
 | `401` | Not logged in, token expired/invalid, account disabled | `"Authentication is required"` |
 | `401` | Login failed | `"Invalid username or password"` |
 | `403` | Role not allowed for this endpoint | `"You don't have permission to access this resource"` |
@@ -550,8 +550,8 @@ The vehicle of a request cannot be changed.
 
 | Field | Type | Required | Other |
 |-------|------|----------|-------|
-| `mechanicId` | long | yes | must be a user with role MECHANIC (400); unknown id → 404. The code does not check that the mechanic is enabled. |
-| `scheduledDate` | datetime | yes | no past-date check on approve |
+| `mechanicId` | long | yes | must be an **enabled** user with role MECHANIC: otherwise 400 `"User with ID x is not a mechanic"` or 400 `"Mechanic account is disabled"`; unknown id → 404 |
+| `scheduledDate` | datetime | yes | now or later (`"Scheduled date cannot be in the past"`) |
 
 ### 5.9 ServiceVisitUpdateDTO
 
@@ -697,11 +697,6 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
   Responses do not include the ids of linked records (only `licensePlate`).
 - **Service request update** replaces `preferredDate`. Always send the current value, or it is cleared.
 - **License plates** are stored without spaces and in upper case. `maxLength` 8 applies after removing spaces.
-- **Known issues (to be fixed)**. Work around these in the frontend for now:
-  - **Approve does not check that the mechanic is enabled.** A disabled mechanic's id in
-    `PATCH /approve` is accepted. Offer only enabled mechanics (`GET /api/admin/users?role=MECHANIC&enabled=true`).
-  - **Approve does not check that `scheduledDate` is not in the past** (unlike `PUT /api/service-visits/{id}`,
-    which requires now or later). Validate the date in the form.
 - **CORS**: only origins listed in `APP_CORS_ALLOWED_ORIGINS` (property `app.cors.allowed-origins`,
   comma-separated) are allowed. If it is empty, no cross-origin call is allowed. Allowed methods: `GET, POST,
   PUT, PATCH, DELETE, OPTIONS`. Allowed request headers: **only `Authorization` and `Content-Type`** (any

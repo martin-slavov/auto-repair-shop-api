@@ -83,6 +83,10 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
             throw new IllegalArgumentException("User with ID " + mechanicId + " is not a mechanic");
         }
 
+        if (!mechanic.isEnabled()) {
+            throw new IllegalArgumentException("Mechanic account is disabled");
+        }
+
         ServiceVisit serviceVisit = new ServiceVisit();
         serviceVisit.setStatus(VisitStatus.SCHEDULED);
         serviceVisit.setScheduledDate(scheduledDate);

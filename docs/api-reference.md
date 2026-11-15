@@ -1,0 +1,714 @@
+# Auto Repair Shop API — Reference for Frontend
+
+This document is generated from the code (controllers, DTOs, `SecurityConfig`, `GlobalExceptionHandler`,
+`PageRequestFactory`, the services and specifications). Anything not confirmed in code is marked **(verify)**.
+
+**Basics**
+
+- Base path: every endpoint starts with `/api`. Locally: `http://localhost:8080` (Spring Boot's default port,
+  unless `server.port` is set). Other hosts depend on the deployment.
+- Swagger UI: `/swagger-ui.html`, OpenAPI JSON: `/v3/api-docs` (can be switched off per environment).
+- All bodies are JSON (`Content-Type: application/json`).
+- Enums are sent and returned as strings (`"PENDING"`, `"ADMIN"`, ...). Unknown values are rejected (see 2.2).
+- Dates (Spring Boot defaults, Jackson 3): dates are strings, never numeric timestamps.
+  - `LocalDate` = `"yyyy-MM-dd"`.
+  - `LocalDateTime` = ISO-8601 **without time zone** (`DateTimeFormatter.ISO_LOCAL_DATE_TIME`). Seconds are
+    always present and the fraction appears only when it is non-zero, e.g. `"2026-11-20T09:00:00"` or
+    `"2026-11-15T10:42:17.123456"`.
+  - Server-side timestamps (`createdAt`, `issuedDate`, `addedAt`, `completedDate`) are in the server's local
+    time. Parse them as local time (JavaScript `new Date("2026-11-20T09:00:00")` already does that).
+  - When sending a `LocalDateTime` (`scheduledDate`), use the same format without a zone, e.g. `"2026-11-20T09:00:00"`.
+- Money and hours are `BigDecimal` and are returned as JSON **numbers** (e.g. `30.00`, not `"30.00"`).
+  JavaScript drops trailing zeros, so format amounts for display yourself.
+- IDs are numbers (`Long`).
+
+---
+
+## 1. Authentication
+
+### 1.1 Register — `POST /api/auth/register` (public)
+
+Creates a **CUSTOMER** account. Field rules: see 5.1.
+
+```json
+{
+  "username": "jdoe",
+  "email": "jdoe@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "password": "secret123",
+  "confirmPassword": "secret123"
+}
+```
+
+Response `201 Created`:
+
+```json
+{ "id": 7, "username": "jdoe", "email": "jdoe@example.com", "role": "CUSTOMER" }
+```
+
+Errors: `400` validation; `409` `"Username is already taken"` or `"Email is already in use"`.
+
+> If `password` and `confirmPassword` differ, the response is `400 "Validation failed"`, but the mismatch is
+> a class-level error and is **not** listed in `fieldErrors` (that map only contains field errors). Check the
+> match in the form before sending.
+
+### 1.2 Login — `POST /api/auth/login` (public)
+
+```json
+{ "username": "jdoe", "password": "secret123" }
+```
+
+Response `200 OK`:
+
+```json
+{ "token": "eyJhbGciOiJIUzI1NiJ9..." }
+```
+
+Errors: `400` if a field is blank (default Bean Validation message, see the note in 2.1);
+`401 "Invalid username or password"` for an unknown user, a wrong password **or a disabled account** (the
+same message on purpose, so the response never reveals whether an account exists).
+
+The token is the only thing returned. It does not include the user's id. The JWT payload carries `sub`
+(username), `role`, `iat`, `exp`. You can decode it to show the username and role, but the server never
+trusts the `role` claim: it loads the role from the database on every request.
+
+### 1.3 Sending the token
+
+```
+Authorization: Bearer <token>
+```
+
+- The header must start with exactly `Bearer ` (with a space). Any other form is ignored, and the request
+  is treated as anonymous.
+- Lifetime: set by the `jwt.expiration` setting, in milliseconds, for example `86400000` = 24 hours. The real
+  value can differ per environment. Read the `exp` claim of the token instead of hard-coding it.
+  There is **no refresh endpoint**. When the token expires, log in again.
+- There is no logout endpoint. Logging out = deleting the token on the client.
+
+### 1.4 Roles
+
+| Role       | How the account is created                                      |
+|------------|-----------------------------------------------------------------|
+| `CUSTOMER` | Self-registration (`POST /api/auth/register`)                    |
+| `MECHANIC` | By an admin (`POST /api/admin/users/mechanic`)                   |
+| `ADMIN`    | By an admin (`POST /api/admin/users/admin`)                      |
+
+Roles are fixed at creation. No endpoint changes a role.
+
+### 1.5 Expired token, invalid token, disabled user
+
+On every request the filter checks the token signature and expiry, loads the user from the database and
+checks `enabled`. If any check fails, the request continues **as anonymous** (no error by itself):
+
+| Situation                                   | Protected endpoint                         | Public endpoint (auth, catalog GET)         |
+|---------------------------------------------|--------------------------------------------|---------------------------------------------|
+| No / malformed / expired / bad-signature token | `401 "Authentication is required"`       | Works, as a guest                           |
+| Valid token, user disabled since login      | `401 "Authentication is required"`         | Works, as a guest                           |
+| Valid token, wrong role                     | `403 "You don't have permission to access this resource"` | —                            |
+| Login with disabled account                 | `401 "Invalid username or password"`       | —                                           |
+
+So on any `401` from a protected endpoint, drop the token and send the user to the login page.
+
+### 1.6 Change own password — `PATCH /api/users/me/password` (any logged-in user)
+
+```json
+{ "currentPassword": "secret123", "newPassword": "newSecret456" }
+```
+
+Response `204 No Content`. Errors: `400 "Current password is incorrect"`,
+`400 "New password must be different from the current password"`, `400` validation (see 5.3).
+Tokens issued before the change **stay valid** until they expire.
+
+---
+
+## 2. Errors
+
+### 2.1 ErrorResponse
+
+Every error produced by the application has this shape:
+
+```json
+{
+  "status": 400,
+  "message": "Validation failed",
+  "timestamp": "2026-11-15T10:42:17.123456",
+  "fieldErrors": {
+    "licensePlate": "License plate must not exceed 8 characters",
+    "year": "Invalid Year"
+  }
+}
+```
+
+- `fieldErrors` maps field name → message, with **one message per field** (if a field breaks two rules, only one
+  is kept). It is filled only for validation errors and is `{}` for all other errors.
+- Validation messages are the ones in section 5. Show `fieldErrors[field]` next to the input, and `message`
+  as a general error.
+- **Language of messages:** the custom messages in the DTOs (e.g. `"License plate is required"`) are always
+  English. Fields that have no custom message use Hibernate Validator's default message, which is translated
+  according to the request's `Accept-Language` header (Spring's `LocaleContextMessageInterpolator`), e.g.
+  `"must not be blank"` (en) or `"darf nicht leer sein"` (de). These fields are:
+  - `LoginRequestDTO`: `username`, `password`
+  - `RegisterRequestDTO`: `password` (blank only)
+  - `ChangePasswordDTO`: `newPassword` (blank only)
+  - `PartCreateDTO`: all fields
+  - `VisitPartCreateDTO`: all fields
+
+  To get English, send `Accept-Language: en`, or map these fields to your own texts.
+
+### 2.2 Status codes the frontend must handle
+
+| Status | Typical cause | Example `message` |
+|--------|---------------|-------------------|
+| `400` | Body validation failed | `"Validation failed"` + `fieldErrors` |
+| `400` | Invalid JSON, missing body, wrong type or unknown enum **in the body** | `"Malformed request body"` |
+| `400` | Wrong type or unknown enum **in a query/path parameter** (e.g. `status=FOO`, `issuedFrom=15.11.2026`, `/api/vehicles/abc`) | `"Invalid value for parameter 'status'"` |
+| `400` | Bad `sort` value | `"Unknown sort field 'price'. Allowed: ..."` |
+| `400` | Range filter inverted | `"yearFrom must not be greater than yearTo"`, `"issuedFrom must not be after issuedTo"` |
+| `400` | Action not allowed in the current status | `"Only pending requests can be approved"`, `"Invalid status transition"`, `"Visit status must be COMPLETED"` |
+| `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Current password is incorrect"`, `"You cannot disable your own account"` |
+| `401` | Not logged in, token expired/invalid, account disabled | `"Authentication is required"` |
+| `401` | Login failed | `"Invalid username or password"` |
+| `403` | Role not allowed for this endpoint | `"You don't have permission to access this resource"` |
+| `403` | Right role, but not your resource (ownership / assignment) | `"You do not have permission to view this vehicle"`, `"You can only modify service requests for your own vehicles"`, `"Mechanic is not assigned to this service visit"` |
+| `404` | ID does not exist (or a non-admin asks for an inactive catalog item) | `"Vehicle not found"`, `"Service request not found with ID: 12"` |
+| `403` | Unknown URL, or a real path called with a method that has no rule (logged-in user) | `"You don't have permission to access this resource"` |
+| `409` | Duplicate unique value | `"Username is already taken"`, `"Vehicle with this license plate already exists"`, `"Part with this serial number already exists"`, `"Catalog item with this name already exists"` |
+| `409` | Resource still in use | `"Vehicle cannot be deleted because it has service requests or visits"`, `"Cannot disable the last enabled admin"` |
+| `409` | Database constraint | `"The data conflicts with existing data"` |
+
+Also possible: `415 "Unsupported Media Type"` (body not JSON) and `500 "Unexpected error"`. `404 "Not Found"`
+and `405 "Method Not Allowed"` are rare. They occur only under the broad rules that cover a whole path prefix
+(`/api/auth/**`, `/api/admin/**` for ADMIN, `/api/service-visits/**` for MECHANIC, `GET /api/catalog-items/**`).
+For example, `GET /api/auth/login` returns 405.
+
+Note: `SecurityConfig` ends with `.anyRequest().denyAll()` (default deny). Any URL or method without an
+explicit rule is refused before it reaches a controller: **`401` for a guest**, **`403` for a logged-in user**.
+So an unknown URL never gives `404` outside the broad rules above.
+
+### 2.3 Two shapes of 401 / 403
+
+The `401 "Authentication is required"` and `403 "You don't have permission..."` that come from the **security
+filter** (no token, or wrong role for the URL) are written by hand in `SecurityConfig` and have **no
+`fieldErrors` key**:
+
+```json
+{ "status": 401, "message": "Authentication is required", "timestamp": "2026-11-15T10:42:17.123456" }
+```
+
+The 401/403 produced by the **exception handler** (failed login, ownership checks) have `"fieldErrors": {}`.
+Treat `fieldErrors` as optional.
+
+The `timestamp` formats also differ slightly. Both are ISO-8601 local date-times without a zone:
+
+- **Filter** (`LocalDateTime.toString()`): the fraction is printed in groups of 3, 6 or 9 digits, and the seconds are
+  left out entirely when seconds and fraction are both zero (e.g. `"2026-11-15T10:42"`).
+- **Handler** (Jackson, `ISO_LOCAL_DATE_TIME`): seconds are always printed, and the fraction only with as many
+  digits as needed.
+
+Parse `timestamp` with a lenient ISO parser (JavaScript `Date` handles both) and don't compare it as a string.
+
+---
+
+## 3. Lists (paging, sorting, filters)
+
+All list endpoints except `GET /api/service-visits/{id}/parts` (a plain array) return a `PageResponse`.
+
+### 3.1 PageResponse
+
+```json
+{
+  "content": [ { "...": "..." } ],
+  "page": 0,
+  "size": 10,
+  "totalElements": 42,
+  "totalPages": 5
+}
+```
+
+`page` and `size` are the values that were actually used (after the rules below).
+
+### 3.2 page / size
+
+| Param | Default | Rule |
+|-------|---------|------|
+| `page` | `0` | 0-based. A negative value becomes `0`. A page past the end returns `content: []`. |
+| `size` | `10` | A value below `1` becomes `10`. A value above `50` becomes `50` (no error). |
+
+A non-numeric value returns `400 "Invalid value for parameter 'page'"`.
+
+### 3.3 sort
+
+- Format: `sort=field` or `sort=field,asc` / `sort=field,desc`. Only **one** field is allowed.
+- The field name is case-sensitive and must be in the endpoint's whitelist (below). The direction is
+  case-insensitive. Without a direction, the default is `asc`.
+- Errors (`400`): unknown field → `"Unknown sort field 'x'. Allowed: a, b, c"`; unknown direction →
+  `"Unknown sort direction 'x'. Allowed: asc, desc"`; more than one comma →
+  `"Sort must be in the format 'field' or 'field,asc|desc' (only one sort field is allowed)"`.
+- `id asc` is always added as a tie-breaker, so the order across pages is stable.
+
+**Filter rules shared by all lists:** every filter is optional and filters are combined with AND. Text
+filters are case-insensitive *contains* (trimmed; `%` and `_` are matched literally; a blank value is ignored).
+License-plate filters also remove spaces first (`"ca 12"` finds `CA1234AB`). Date filters use `yyyy-MM-dd`,
+both bounds inclusive. Price/total bounds are inclusive.
+
+### 3.4 Per list endpoint
+
+#### `GET /api/vehicles` — CUSTOMER, ADMIN
+Customers see only their own vehicles. Admins see all.
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `licensePlate` | string | contains, spaces ignored |
+| `manufacturer` | string | contains |
+| `model` | string | contains |
+| `yearFrom`, `yearTo` | integer | inclusive; `yearFrom > yearTo` → 400 |
+| `ownerId` | long | ADMIN only; ignored for customers |
+
+Sort: `licensePlate`, `manufacturer`, `model`, `year`, `firstRegistrationDate`. Default `licensePlate,asc`.
+
+#### `GET /api/service-requests` — CUSTOMER, ADMIN
+Customers see requests for their own vehicles. Admins see all requests **in every status** (no default status filter).
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `status` | enum | `PENDING`, `APPROVED`, `REJECTED` |
+| `type` | enum | `SERVICE`, `INSPECTION`, `CONSULTATION` |
+| `preferredFrom`, `preferredTo` | date | inclusive; requests without a preferred date never match; from > to → 400 |
+| `licensePlate` | string | contains, spaces ignored |
+| `vehicleId` | long | still limited to the caller's scope |
+
+Sort: `preferredDate`, `status`, `type`, `createdAt`. Default `createdAt,desc`.
+
+#### `GET /api/service-visits` — ADMIN, MECHANIC, CUSTOMER
+Admins see all visits. Mechanics see visits they are assigned to. Customers see visits of their own vehicles.
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `status` | enum | `SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `INVOICED` (exact match) |
+| `scheduledFrom`, `scheduledTo` | date | date part of `scheduledDate`, inclusive; from > to → 400 |
+| `licensePlate` | string | contains, spaces ignored |
+| `vehicleId` | long | still limited to the caller's scope |
+| `mechanicId` | long | ADMIN only; ignored for other roles |
+
+Sort: `scheduledDate`, `completedDate`, `status`. Default `scheduledDate,desc`.
+
+#### `GET /api/parts` — ADMIN, MECHANIC
+Admins see all parts and get `PartResponseDTO`. Mechanics see **active parts only** and get `PartCatalogDTO`
+(no `unitCost`).
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `name` | string | contains |
+| `serialNumber` | string | contains |
+| `minPrice`, `maxPrice` | decimal | on `unitSellPrice`, inclusive; min > max → 400 |
+| `active` | boolean | ADMIN only; ignored for mechanics |
+
+Sort: `name`, `serialNumber`, `unitSellPrice`; admins also `unitCost` (a mechanic who sorts by `unitCost`
+gets 400). Default `name,asc`.
+
+#### `GET /api/catalog-items` — public
+Guests and non-admins see active items only. With an ADMIN token you see all items and the `active` filter works.
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `name` | string | contains |
+| `minPrice`, `maxPrice` | decimal | on `basePrice`, inclusive; min > max → 400 |
+| `active` | boolean | ADMIN only; ignored otherwise |
+
+Sort: `name`, `price` (= `basePrice`), `estimatedHours`, `createdAt`. Default `name,asc`.
+
+#### `GET /api/invoices` — CUSTOMER, ADMIN
+Customers see invoices for their own vehicles. Admins see all.
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `paid` | boolean | |
+| `invoiceNumber` | string | contains |
+| `licensePlate` | string | contains, spaces ignored |
+| `issuedFrom`, `issuedTo` | date | date part of `issuedDate`, inclusive; from > to → 400 |
+| `minTotal`, `maxTotal` | decimal | on `totalPrice`, inclusive; min > max → 400 |
+| `ownerId` | long | ADMIN only; ignored for customers |
+
+Sort: `invoiceNumber`, `totalPrice`, `issuedDate`, `paid`. Default `issuedDate,desc`.
+
+#### `GET /api/admin/users` — ADMIN
+
+| Filter | Type | Notes |
+|--------|------|-------|
+| `username` | string | contains |
+| `email` | string | contains |
+| `role` | enum | `ADMIN`, `MECHANIC`, `CUSTOMER` |
+| `enabled` | boolean | |
+
+Sort: `username`, `email`, `role`, `enabled`, `id`. Default `username,asc`.
+
+---
+
+## 4. Endpoints
+
+Roles come from `SecurityConfig`. "Own" rules are checked in the services (a violation gives `403`).
+Request body field rules are in section 5.
+
+### 4.0 Response objects
+
+| Object | Fields |
+|--------|--------|
+| `RegisterResponseDTO` | `id`, `username`, `email`, `role` |
+| `UserAdminDTO` | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
+| `VehicleResponseDTO` | `id`, `licensePlate`, `manufacturer`, `model`, `year`, `ownerId`, `ownerName` ("First Last"), `firstRegistrationDate` (nullable) |
+| `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable) |
+| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]` |
+| `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed) |
+| `VisitPartResponseDTO` | `id` (= part line id), `partName`, `quantity`, `priceAtTimeOfUse` (**line total** = unit price × quantity), `addedAt` |
+| `PartResponseDTO` (admin) | `id`, `name`, `serialNumber`, `unitCost`, `unitSellPrice`, `active` |
+| `PartCatalogDTO` (mechanic) | `id`, `name`, `serialNumber`, `unitSellPrice`, `active` |
+| `CatalogItemResponseDTO` | `id`, `name`, `description`, `basePrice`, `active`, `createdAt`, `estimatedHours` |
+| `InvoiceResponseDTO` | `id`, `invoiceNumber`, `licensePlate`, `partsPrice`, `laborPrice`, `totalPrice`, `issuedDate`, `paid` |
+
+Responses contain no ids for the linked vehicle, request or visit (only `licensePlate`), except
+`VehicleResponseDTO.ownerId`.
+
+### 4.1 Auth
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| POST | `/api/auth/register` | public | `RegisterRequestDTO` | 201 | `RegisterResponseDTO` (role `CUSTOMER`) |
+| POST | `/api/auth/login` | public | `LoginRequestDTO` | 200 | `{ "token": "..." }` |
+
+### 4.2 Catalog items
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/catalog-items` | public | — | 200 | `PageResponse<CatalogItemResponseDTO>` |
+| GET | `/api/catalog-items/{id}` | public | — | 200 | `CatalogItemResponseDTO` (inactive → 404 unless ADMIN) |
+| POST | `/api/catalog-items` | ADMIN | `CatalogItemCreateDTO` | 201 | `CatalogItemResponseDTO` (`active: true`) |
+| PUT | `/api/catalog-items/{id}` | ADMIN | `CatalogItemUpdateDTO` | 200 | `CatalogItemResponseDTO` |
+| DELETE | `/api/catalog-items/{id}` | ADMIN | — | 204 | — (hard delete; to hide an item, set `active: false`) |
+
+### 4.3 Vehicles
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/vehicles` | CUSTOMER, ADMIN | — | 200 | `PageResponse<VehicleResponseDTO>` |
+| GET | `/api/vehicles/{id}` | CUSTOMER (own), ADMIN | — | 200 | `VehicleResponseDTO` |
+| POST | `/api/vehicles` | CUSTOMER | `VehicleCreateDTO` | 201 | `VehicleResponseDTO` (owner = caller) |
+| PUT | `/api/vehicles/{id}` | CUSTOMER (own), ADMIN | `VehicleUpdateDTO` | 200 | `VehicleResponseDTO` |
+| DELETE | `/api/vehicles/{id}` | CUSTOMER (own), ADMIN | — | 204 | — (409 if it has service requests or visits) |
+
+Admins cannot create vehicles (POST is CUSTOMER only).
+
+### 4.4 Service requests
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/service-requests` | CUSTOMER, ADMIN | — | 200 | `PageResponse<ServiceRequestResponseDTO>` |
+| POST | `/api/service-requests` | CUSTOMER (own vehicle) | `ServiceRequestCreateDTO` | 201 | `ServiceRequestResponseDTO` (status `PENDING`) |
+| PUT | `/api/service-requests/{id}` | CUSTOMER (own), ADMIN | `ServiceRequestUpdateDTO` | 200 | `ServiceRequestResponseDTO` (PENDING only) |
+| DELETE | `/api/service-requests/{id}` | CUSTOMER (own), ADMIN | — | 204 | — (PENDING only) |
+| PATCH | `/api/service-requests/{id}/approve` | ADMIN | `ApproveRequestDTO` | 200 | `ServiceRequestResponseDTO` (status `APPROVED`) |
+| PATCH | `/api/service-requests/{id}/reject` | ADMIN | — | 200 | `ServiceRequestResponseDTO` (status `REJECTED`) |
+
+After a request is created, an email notification goes to the shop asynchronously. This does not affect the response.
+
+### 4.5 Service visits
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/service-visits` | ADMIN, MECHANIC, CUSTOMER | — | 200 | `PageResponse<ServiceVisitResponseDTO>` |
+| PATCH | `/api/service-visits/{id}/status` | MECHANIC (assigned) | `UpdateVisitStatusDTO` | 200 | `ServiceVisitResponseDTO` |
+| PATCH | `/api/service-visits/{id}/complete` | MECHANIC (lead) | `CompleteVisitDTO` | 200 | `ServiceVisitResponseDTO` |
+| PUT | `/api/service-visits/{id}` | ADMIN | `ServiceVisitUpdateDTO` | 200 | `ServiceVisitResponseDTO` (SCHEDULED only) |
+| DELETE | `/api/service-visits/{id}` | ADMIN | — | 204 | — (SCHEDULED, no parts; request → PENDING) |
+| PATCH | `/api/service-visits/{id}/invoice` | ADMIN | — | 201 | `InvoiceResponseDTO` (visit must be COMPLETED; visit → INVOICED) |
+
+Visits are created only by approving a request. In the `PATCH .../status` and `PATCH .../complete` responses,
+`mechanics[]` contains **only the calling mechanic's** assignment. The list and `PUT` responses contain all assignments.
+
+### 4.6 Visit parts
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/service-visits/{id}/parts` | ADMIN, MECHANIC (assigned) | — | 200 | `VisitPartResponseDTO[]` (plain array, not paged) |
+| POST | `/api/service-visits/{id}/parts` | MECHANIC (assigned) | `VisitPartCreateDTO` | 201 | `VisitPartResponseDTO` |
+| PUT | `/api/service-visits/{id}/parts/{partLineId}` | ADMIN, MECHANIC (assigned) | `VisitPartUpdateDTO` | 200 | `VisitPartResponseDTO` |
+| DELETE | `/api/service-visits/{id}/parts/{partLineId}` | ADMIN, MECHANIC (assigned) | — | 204 | — |
+
+- POST: the visit must be `IN_PROGRESS` and the part must be active (else `400 "Part is not active"`). The price is
+  taken from the part's `unitSellPrice` at that moment.
+- PUT/DELETE: not allowed once the visit is `COMPLETED` or `INVOICED`. A PUT keeps the original unit price.
+  `partLineId` is the `id` from `VisitPartResponseDTO`.
+- Customers cannot see part lines. They see only the invoice totals.
+
+### 4.7 Parts
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/parts` | ADMIN, MECHANIC | — | 200 | `PageResponse<PartResponseDTO>` (admin) / `PageResponse<PartCatalogDTO>` (mechanic) |
+| POST | `/api/parts` | ADMIN | `PartCreateDTO` | 201 | `PartResponseDTO` (`active: true`) |
+| PUT | `/api/parts/{id}` | ADMIN | `PartUpdateDTO` | 200 | `PartResponseDTO` |
+| DELETE | `/api/parts/{id}` | ADMIN | — | 204 | — (409 if used in a visit; deactivate instead) |
+
+### 4.8 Invoices
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/invoices` | CUSTOMER, ADMIN | — | 200 | `PageResponse<InvoiceResponseDTO>` |
+| GET | `/api/invoices/{id}` | CUSTOMER (own vehicle), ADMIN | — | 200 | `InvoiceResponseDTO` |
+| PATCH | `/api/invoices/{id}/pay` | ADMIN | — | 200 | `InvoiceResponseDTO` (`paid: true`; already paid → 400) |
+| DELETE | `/api/invoices/{id}` | ADMIN | — | 204 | — (unpaid only; visit → COMPLETED) |
+
+Invoices are created via `PATCH /api/service-visits/{id}/invoice`. Calculation: `partsPrice` = sum of the
+visit's part-line totals; `laborPrice` = 30.00 × total `hoursWorked` of all assignments; `totalPrice` = both
+added. `invoiceNumber` = `INV-<current year>-<visit id, 5 digits>`, e.g. `INV-2026-00012`.
+
+### 4.9 Admin users
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| GET | `/api/admin/users` | ADMIN | — | 200 | `PageResponse<UserAdminDTO>` |
+| POST | `/api/admin/users/mechanic` | ADMIN | `RegisterRequestDTO` | 201 | `RegisterResponseDTO` (role `MECHANIC`) |
+| POST | `/api/admin/users/admin` | ADMIN | `RegisterRequestDTO` | 201 | `RegisterResponseDTO` (role `ADMIN`) |
+| PATCH | `/api/admin/users/{id}/enabled` | ADMIN | `UpdateUserEnabledDTO` | 200 | `UserAdminDTO` |
+
+Enable/disable: sending the current value changes nothing and returns the user. You cannot disable yourself
+(`400`) or the last enabled admin (`409`). A disabled user is locked out on their next request (see 1.5).
+
+### 4.10 Own password
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| PATCH | `/api/users/me/password` | any authenticated | `ChangePasswordDTO` | 204 | — |
+
+---
+
+## 5. Field rules (request DTOs)
+
+"Required" means `@NotNull`/`@NotBlank` (blank = empty or whitespace only). "Max" is `@Size(max)`, which
+is the value for `maxLength`. `@Digits(i, f)` = at most `i` digits before and `f` after the decimal point.
+
+### 5.1 RegisterRequestDTO (register, create mechanic, create admin)
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `username` | string | yes | 1–50 | unique (409) |
+| `email` | string | yes | max 254 | valid email; unique (409) |
+| `firstName` | string | yes | max 50 | |
+| `lastName` | string | yes | max 50 | |
+| `password` | string | yes | min 8; max 72 UTF-8 bytes (not in the DTO, see 7) | over 72 bytes → `400 "password cannot be more than 72 bytes"` |
+| `confirmPassword` | string | yes | max 255 | must equal `password` (class-level, not in `fieldErrors`) |
+
+### 5.2 LoginRequestDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `username` | string | yes | — | |
+| `password` | string | yes | — | |
+
+### 5.3 ChangePasswordDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `currentPassword` | string | yes | — | must match (else 400) |
+| `newPassword` | string | yes | min 8 | must differ from current (else 400) |
+
+### 5.4 UpdateUserEnabledDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `enabled` | boolean | yes | |
+
+### 5.5 VehicleCreateDTO / VehicleUpdateDTO (same rules)
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `licensePlate` | string | yes | max 8 | whitespace removed and upper-cased **before** validation, so `"CA 1234 AB"` → `"CA1234AB"` (8, valid); unique (409) |
+| `manufacturer` | string | yes | max 50 | |
+| `model` | string | yes | max 80 | |
+| `year` | integer | yes | — | 1886 … current year (`"Invalid Year"`) |
+| `firstRegistrationDate` | date | no | — | not in the future |
+
+### 5.6 ServiceRequestCreateDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `vehicleId` | long | yes | — | must be the caller's vehicle (403); unknown → 404 |
+| `description` | string | yes | max 500 | |
+| `preferredDate` | date | no | — | today or later |
+| `type` | enum | no | — | `SERVICE` (default), `INSPECTION`, `CONSULTATION` |
+
+### 5.7 ServiceRequestUpdateDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `description` | string | yes | max 500 | |
+| `preferredDate` | date | no | — | today or later. **Sending null or omitting it clears the stored date.** |
+| `type` | enum | **yes** | — | `SERVICE`, `INSPECTION`, `CONSULTATION` |
+
+The vehicle of a request cannot be changed.
+
+### 5.8 ApproveRequestDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `mechanicId` | long | yes | must be a user with role MECHANIC (400); unknown id → 404. The code does not check that the mechanic is enabled. |
+| `scheduledDate` | datetime | yes | no past-date check on approve |
+
+### 5.9 ServiceVisitUpdateDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `scheduledDate` | datetime | yes | now or later |
+
+### 5.10 UpdateVisitStatusDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `newStatus` | enum | yes | the only accepted value is `IN_PROGRESS` (from `SCHEDULED`); anything else → `400 "Invalid status transition"` |
+
+### 5.11 CompleteVisitDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `technicalNotes` | string | yes | max 5000 | |
+| `hoursWorked` | decimal | yes | — | > 0; `@Digits(3, 2)` (max 999.99) |
+
+### 5.12 PartCreateDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `name` | string | yes | max 100 | |
+| `serialNumber` | string | yes | max 60 | unique (409) |
+| `unitCost` | decimal | yes | — | > 0 (no `@Digits` here) |
+| `unitSellPrice` | decimal | yes | — | > 0 (no `@Digits` here) |
+
+### 5.13 PartUpdateDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `name` | string | yes | max 100 | |
+| `serialNumber` | string | yes | max 60 | unique (409) |
+| `unitCost` | decimal | yes | — | ≥ 0; `@Digits(6, 2)` |
+| `unitSellPrice` | decimal | yes | — | ≥ 0; `@Digits(6, 2)` |
+| `active` | boolean | yes | — | |
+
+Create requires > 0, but update allows 0 (the update message still says "must be greater than zero").
+Both price columns are `DECIMAL(8, 2)` with `>= 0` in the database (migration `V7__create_part_table.sql`), so
+the real limit is **0 … 999999.99 with at most 2 decimals**. Create does not validate the digits, so apply this
+limit in the form for create as well (see "known issues" in section 7).
+
+### 5.14 VisitPartCreateDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `partId` | long | yes | unknown → 404; inactive → 400 |
+| `quantity` | integer | yes | > 0 |
+
+### 5.15 VisitPartUpdateDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `quantity` | integer | yes | > 0 |
+
+### 5.16 CatalogItemCreateDTO / CatalogItemUpdateDTO
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `name` | string | yes | max 100 | unique (409) |
+| `description` | string | yes | max 500 | |
+| `basePrice` | decimal | yes | — | ≥ 0; `@Digits(6, 2)` |
+| `estimatedHours` | decimal | yes | — | > 0; `@Digits(3, 2)` |
+| `active` | boolean | update only, required | — | new items are always active |
+
+---
+
+## 6. Status workflows
+
+### 6.1 Service request (`PENDING`, `APPROVED`, `REJECTED`)
+
+- **create → `PENDING`**: CUSTOMER, for their own vehicle.
+- **`PENDING` → `APPROVED`**: ADMIN (`/approve`). Creates a visit in `SCHEDULED` with the chosen mechanic as `LEAD`.
+- **`PENDING` → `REJECTED`**: ADMIN (`/reject`). Final.
+- **edit / delete**: owner CUSTOMER or ADMIN, only while `PENDING`.
+- **`APPROVED` → `PENDING`**: happens automatically when an ADMIN deletes the (still `SCHEDULED`) visit.
+
+### 6.2 Service visit (`SCHEDULED`, `IN_PROGRESS`, `COMPLETED`, `INVOICED`)
+
+- **→ `SCHEDULED`**: created by approving a request (ADMIN).
+- **reschedule / delete**: ADMIN, only while `SCHEDULED` (delete also needs no parts; the request goes back to `PENDING`).
+- **`SCHEDULED` → `IN_PROGRESS`**: an assigned MECHANIC (`PATCH /status` with `newStatus: IN_PROGRESS`).
+- **add parts**: an assigned MECHANIC, only while `IN_PROGRESS`. Change/remove parts: ADMIN or an assigned
+  MECHANIC, until `COMPLETED`.
+- **`IN_PROGRESS` → `COMPLETED`**: the **LEAD** mechanic only (`PATCH /complete`, sets notes, hours and `completedDate`).
+- **`COMPLETED` → `INVOICED`**: ADMIN (`PATCH /invoice`, creates the invoice).
+- **`INVOICED` → `COMPLETED`**: automatically when an ADMIN deletes the unpaid invoice.
+- There is no way back from `IN_PROGRESS` to `SCHEDULED`.
+
+### 6.3 Invoice (`paid: false` / `true`)
+
+- **create (unpaid)**: ADMIN, from a `COMPLETED` visit.
+- **unpaid → paid**: ADMIN (`/pay`). Final, because a paid invoice cannot be deleted or un-paid.
+- **delete**: ADMIN, unpaid only.
+
+---
+
+## 7. Things the frontend must know
+
+- **`GET /api/service-requests`**: an admin sees **all statuses** by default. For a "pending requests" view,
+  send `status=PENDING`.
+- **`GET /api/service-visits`**:
+  - `status` is an exact match: `status=COMPLETED` does **not** include invoiced visits. Use `status=INVOICED` for those.
+  - Visibility: admin = all visits, mechanic = visits they are assigned to, customer = visits of their own vehicles.
+  - Every role gets the same fields, so **customers also see `technicalNotes`, `hoursWorked` and mechanic
+    names**. In the list, a mechanic sees **all** assignments of each visit, not only their own.
+  - Only `LEAD` assignments are created by the API (on approve). `ASSISTANT` exists in the data model, but no
+    endpoint adds an assistant.
+- **`GET /api/parts`**: ADMIN and MECHANIC get different shapes (`PartView`): `PartResponseDTO` with `unitCost`
+  vs `PartCatalogDTO` without it. Sorting by `unitCost` is admin only (mechanic → 400). Mechanics only see
+  active parts.
+- **`GET /api/catalog-items`**: public. With an ADMIN token, inactive items appear and the `active` filter
+  works. An invalid or expired token here is ignored (you get the guest view, not a 401).
+- **Passwords**: minimum 8 characters (`password`, `newPassword`), maximum **72 bytes in UTF-8**.
+  - The DTOs have no max length. The limit comes from Spring Security 7.1.1's `BCrypt.hashpw`, which throws
+    `IllegalArgumentException("password cannot be more than 72 bytes")` when a new password is hashed.
+    `GlobalExceptionHandler` turns that into **`400 "password cannot be more than 72 bytes"`** with
+    `fieldErrors: {}` (this applies to register, create mechanic/admin, and change password).
+  - The limit counts bytes, not characters: ASCII is 1 byte, but e.g. Cyrillic letters are 2 bytes and emoji
+    are 4. Check `new TextEncoder().encode(pw).length <= 72` in the form.
+  - At login no length error is raised. A login password longer than 72 bytes just won't match.
+- **Roles never change** after an account is created. Admins create mechanics and other admins; customers register themselves.
+- **Tokens**: a token issued before a password change **stays valid** until it expires. Disabling an account
+  takes effect on the **next request** (the server loads role and `enabled` from the database every time). The
+  same would apply to a role changed directly in the database.
+- **Endpoints that do NOT exist yet** (may be needed): `GET /api/users/me`, `GET /api/service-requests/{id}`,
+  `GET /api/service-visits/{id}`, `GET /api/parts/{id}`, `GET /api/admin/users/{id}`. Until they exist, read
+  these from the list endpoints. What a call returns today follows from `SecurityConfig`, which ends with
+  `.anyRequest().denyAll()` (default deny):
+  - A guest always gets **401**.
+  - A logged-in user gets **403**, except where a broad rule lets the request through to Spring MVC (last two rows):
+
+  | Call | Guest | Logged in |
+  |------|-------|-----------|
+  | `GET /api/users/me` | 401 | 403 |
+  | `GET /api/service-requests/{id}` | 401 | 403 |
+  | `GET /api/parts/{id}` | 401 | 403 |
+  | `GET /api/service-visits/{id}` | 401 | 403 for ADMIN/CUSTOMER; **405** for MECHANIC (the `/api/service-visits/**` MECHANIC rule matches, and PUT/DELETE exist on that path) |
+  | `GET /api/admin/users/{id}` | 401 | 403 for non-admins; **404** for ADMIN (the `/api/admin/**` rule matches, nothing is mapped there) |
+- **Approve response**: `/approve` returns the request, not the new visit. Reload the visit list to get it.
+  Responses do not include the ids of linked records (only `licensePlate`).
+- **Service request update** replaces `preferredDate`. Always send the current value, or it is cleared.
+- **License plates** are stored without spaces and in upper case. `maxLength` 8 applies after removing spaces.
+- **Known issues (to be fixed)**. Work around these in the frontend for now:
+  - **Part validation differs between create and update.** `PartCreateDTO` requires `unitCost` and
+    `unitSellPrice` > 0 and does not check digits. `PartUpdateDTO` allows 0, checks `@Digits(6, 2)`, and its
+    message wrongly says "must be greater than zero". The database column is `DECIMAL(8, 2)`, `>= 0`. Use
+    0.01 … 999999.99 with 2 decimals for both forms.
+  - **Approve does not check that the mechanic is enabled.** A disabled mechanic's id in
+    `PATCH /approve` is accepted. Offer only enabled mechanics (`GET /api/admin/users?role=MECHANIC&enabled=true`).
+  - **Approve does not check that `scheduledDate` is not in the past** (unlike `PUT /api/service-visits/{id}`,
+    which requires now or later). Validate the date in the form.
+- **CORS**: only origins listed in `APP_CORS_ALLOWED_ORIGINS` (property `app.cors.allowed-origins`,
+  comma-separated) are allowed. If it is empty, no cross-origin call is allowed. Allowed methods: `GET, POST,
+  PUT, PATCH, DELETE, OPTIONS`. Allowed request headers: **only `Authorization` and `Content-Type`** (any
+  other custom header fails the preflight). No cookies/credentials (`allowCredentials=false`); preflight
+  cached for 3600 s.

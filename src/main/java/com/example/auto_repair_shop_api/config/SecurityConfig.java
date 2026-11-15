@@ -124,7 +124,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.GET, "/api/invoices/{id}").hasAnyRole("ADMIN", "CUSTOMER")
                                 .requestMatchers(HttpMethod.DELETE, "/api/invoices/{id}").hasRole("ADMIN")
                                 .requestMatchers(HttpMethod.PATCH, "/api/users/me/password").authenticated()
-                                .anyRequest().authenticated()
+                                .anyRequest().denyAll()
                 );
         return http.build();
     }

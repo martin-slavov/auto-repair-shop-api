@@ -42,7 +42,8 @@ public class ServiceVisitController {
 
     @Operation(summary = "Search service visits (paged)",
             description = "Access: ADMIN, MECHANIC, CUSTOMER. Admins see all visits, mechanics see visits they are " +
-                    "assigned to, customers see visits of their own vehicles.")
+                    "assigned to, customers see visits of their own vehicles. `mechanics[].mechanicId` is filled " +
+                    "for admins only (null for other roles).")
     @GetMapping
     public ResponseEntity<PageResponse<ServiceVisitResponseDTO>> getVisitsForCurrentUser(
             @Parameter(description = "Visit status: SCHEDULED, IN_PROGRESS, COMPLETED, INVOICED")
@@ -74,7 +75,8 @@ public class ServiceVisitController {
 
     @Operation(summary = "Update visit status",
             description = "Access: MECHANIC. Only a mechanic assigned to the visit; the only allowed transition " +
-                    "is SCHEDULED to IN_PROGRESS.")
+                    "is SCHEDULED to IN_PROGRESS. `mechanics[]` holds only the caller's assignment, with " +
+                    "`mechanicId` null.")
     @PatchMapping("/{id}/status")
     public ResponseEntity<ServiceVisitResponseDTO> updateVisitStatus(@Valid @RequestBody UpdateVisitStatusDTO dto, @PathVariable Long id) {
 
@@ -85,7 +87,8 @@ public class ServiceVisitController {
 
     @Operation(summary = "Complete a visit",
             description = "Access: MECHANIC. Only the lead mechanic of the visit, while it is IN_PROGRESS. " +
-                    "Records the technical notes and hours worked.")
+                    "Records the technical notes and hours worked. `mechanics[]` holds only the caller's " +
+                    "assignment, with `mechanicId` null.")
     @PatchMapping("/{id}/complete")
     public ResponseEntity<ServiceVisitResponseDTO> completeVisit(@PathVariable Long id, @Valid @RequestBody CompleteVisitDTO dto) {
 
@@ -114,7 +117,7 @@ public class ServiceVisitController {
                     "enabled mechanic.")
     @GetMapping("/available-slots")
     public ResponseEntity<List<AvailableSlotDTO>> getAvailableSlots(
-            @Parameter(description = "Mechanic (user) ID", required = true)
+            @Parameter(description = "Mechanic (user) ID, e.g. `mechanics[].mechanicId` of a visit", required = true)
             @RequestParam Long mechanicId,
             @Parameter(description = "Day (yyyy-MM-dd)", required = true)
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -129,7 +132,8 @@ public class ServiceVisitController {
             description = "Access: ADMIN. Only SCHEDULED visits. The new start must be now or later, on a working " +
                     "day (Monday to Friday), between 09:00 and 16:00 and on a 30-minute slot (400 otherwise). " +
                     "Every mechanic assigned to the visit must be free for 60 minutes from the new start, " +
-                    "ignoring this visit itself (409 \"Mechanic is already booked at this time\").")
+                    "ignoring this visit itself (409 \"Mechanic is already booked at this time\"). The response " +
+                    "lists every assignment with its `mechanicId`.")
     @PutMapping("/{id}")
     public ResponseEntity<ServiceVisitResponseDTO> updateVisit(@PathVariable Long id, @Valid @RequestBody ServiceVisitUpdateDTO dto) {
 

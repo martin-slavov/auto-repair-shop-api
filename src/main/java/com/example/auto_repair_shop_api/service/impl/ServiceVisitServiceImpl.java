@@ -113,7 +113,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
 
         VisitAssignment savedAssignment = visitAssignmentRepository.save(assignment);
 
-        return serviceVisitMapper.toResponseDto(savedVisit, savedAssignment);
+        return serviceVisitMapper.toResponseDto(savedVisit, savedAssignment, true);
     }
 
     @Override
@@ -168,8 +168,9 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
                         .collect(Collectors.groupingBy(assignment -> assignment.getServiceVisit().getId()))
                 : Map.of();
 
+        boolean isAdmin = appUser.getRole() == Role.ADMIN;
         return PageResponse.from(result, visit ->
-                serviceVisitMapper.toResponseDto(visit, assignmentsByVisitId.getOrDefault(visit.getId(), List.of())));
+                serviceVisitMapper.toResponseDto(visit, assignmentsByVisitId.getOrDefault(visit.getId(), List.of()), isAdmin));
     }
 
     @Override
@@ -186,7 +187,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         serviceVisit.setStatus(newStatus);
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, assignment);
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignment, false);
     }
 
     @Override
@@ -209,7 +210,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
 
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, assignment);
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignment, false);
     }
 
     // ADMIN only: enforced in SecurityConfig.
@@ -228,7 +229,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         serviceVisit.setScheduledDate(dto.scheduledDate());
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, assignments);
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignments, true);
     }
 
     // ADMIN only: enforced in SecurityConfig.

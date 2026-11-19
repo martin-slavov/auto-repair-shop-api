@@ -11,18 +11,19 @@ import java.util.List;
 @Component
 public class ServiceVisitMapper {
 
-    public ServiceVisitResponseDTO toResponseDto(ServiceVisit visit, VisitAssignment assignment) {
-        return toResponseDto(visit, List.of(assignment));
+    public ServiceVisitResponseDTO toResponseDto(ServiceVisit visit, VisitAssignment assignment, boolean includeMechanicId) {
+        return toResponseDto(visit, List.of(assignment), includeMechanicId);
     }
 
     // Used when the caller is not one specific mechanic (e.g. an admin): shows every assigned mechanic.
-    public ServiceVisitResponseDTO toResponseDto(ServiceVisit visit, List<VisitAssignment> assignments) {
+    public ServiceVisitResponseDTO toResponseDto(ServiceVisit visit, List<VisitAssignment> assignments, boolean includeMechanicId) {
 
         List<MechanicAssignmentDTO> mechanics = assignments.stream()
                 .map(assignment -> new MechanicAssignmentDTO(
                         assignment.getMechanic().getFirstName() + " " + assignment.getMechanic().getLastName(),
                         assignment.getRoleInVisit().name(),
-                        assignment.getHoursWorked()
+                        assignment.getHoursWorked(),
+                        includeMechanicId ? assignment.getMechanic().getId() : null
                 ))
                 .toList();
 

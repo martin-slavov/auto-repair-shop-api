@@ -360,7 +360,7 @@ Request body field rules are in section 5.
 | `VehicleResponseDTO` | `id`, `licensePlate`, `manufacturer`, `model`, `year`, `ownerId`, `ownerName` ("First Last"), `firstRegistrationDate` (nullable) |
 | `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable) |
 | `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]` |
-| `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed) |
+| `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed), `mechanicId` (the mechanic's user id; **ADMIN only**, `null` for MECHANIC and CUSTOMER) |
 | `VisitPartResponseDTO` | `id` (= part line id), `partName`, `quantity`, `priceAtTimeOfUse` (**line total** = unit price × quantity), `addedAt` |
 | `PartResponseDTO` (admin) | `id`, `name`, `serialNumber`, `unitCost`, `unitSellPrice`, `active` |
 | `PartCatalogDTO` (mechanic) | `id`, `name`, `serialNumber`, `unitSellPrice`, `active` |
@@ -371,7 +371,7 @@ Request body field rules are in section 5.
 | `InvoicePartLineDTO` (in `partLines[]`) | `partName`, `quantity`, `unitPrice` (= `lineTotal` ÷ `quantity`, 2 decimals), `lineTotal` (= the part line's `priceAtTimeOfUse`) |
 
 Responses contain no ids for the linked vehicle, request or visit (only `licensePlate`), except
-`VehicleResponseDTO.ownerId`.
+`VehicleResponseDTO.ownerId` and `MechanicAssignmentDTO.mechanicId` (admin only).
 
 ### 4.1 Auth
 
@@ -429,6 +429,16 @@ After a request is created, an email notification goes to the shop asynchronousl
 
 Visits are created only by approving a request. In the `PATCH .../status` and `PATCH .../complete` responses,
 `mechanics[]` contains **only the calling mechanic's** assignment. The list and `PUT` responses contain all assignments.
+
+`mechanics[].mechanicId` is filled only when an ADMIN calls (the list and `PUT`); it is the value to pass as
+`mechanicId` to `available-slots` (4.5.2). Mechanics and customers get `null` (in the list and in the
+`PATCH .../status` and `PATCH .../complete` responses). Example `mechanics[]` for an admin:
+
+```json
+"mechanics": [
+  { "mechanicName": "Ivan Petrov", "roleInVisit": "LEAD", "hoursWorked": 0.00, "mechanicId": 4 }
+]
+```
 
 #### 4.5.1 Booking rules (approve and reschedule)
 
@@ -729,7 +739,7 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
   - `status` is an exact match: `status=COMPLETED` does **not** include invoiced visits. Use `status=INVOICED` for those.
   - Visibility: admin = all visits, mechanic = visits they are assigned to, customer = visits of their own vehicles.
   - Every role gets the same fields, so **customers also see `technicalNotes`, `hoursWorked` and mechanic
-    names**. In the list, a mechanic sees **all** assignments of each visit, not only their own.
+    names**. The only difference: `mechanics[].mechanicId` is filled for admins and `null` for others. In the list, a mechanic sees **all** assignments of each visit, not only their own.
   - Only `LEAD` assignments are created by the API (on approve). `ASSISTANT` exists in the data model, but no
     endpoint adds an assistant.
 - **`GET /api/parts`**: ADMIN and MECHANIC get different shapes (`PartView`): `PartResponseDTO` with `unitCost`
@@ -767,9 +777,10 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
   | `GET /api/admin/users/{id}` | 401 | 403 for non-admins; **404** for ADMIN (the `/api/admin/**` rule matches, nothing is mapped there) |
 - **Scheduling**: before approving or rescheduling, load `GET /api/service-visits/available-slots` for the
   chosen mechanic and day (with `excludeVisitId` when rescheduling) and offer only `available: true` starts.
+  When rescheduling, take the mechanic from the visit's `mechanics[].mechanicId` (admin responses only).
   Send the slot's `start` unchanged as `scheduledDate`. See 4.5.1.
 - **Approve response**: `/approve` returns the request, not the new visit. Reload the visit list to get it.
-  Responses do not include the ids of linked records (only `licensePlate`).
+  Responses do not include the ids of linked records (only `licensePlate`), apart from the exceptions in 4.0.
 - **Service request update** replaces `preferredDate`. Always send the current value, or it is cleared.
 - **License plates** are stored without spaces and in upper case. `maxLength` 8 applies after removing spaces.
 - **CORS**: only origins listed in `APP_CORS_ALLOWED_ORIGINS` (property `app.cors.allowed-origins`,

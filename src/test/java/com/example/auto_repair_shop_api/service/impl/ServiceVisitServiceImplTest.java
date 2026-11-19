@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.config.BookingProperties;
+import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
@@ -23,8 +24,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -117,8 +122,10 @@ class ServiceVisitServiceImplTest {
         assertThat(result.id()).isEqualTo(VISIT_ID);
         assertThat(result.status()).isEqualTo("SCHEDULED");
         assertThat(result.scheduledDate()).isEqualTo(start);
-        assertThat(result.mechanics()).singleElement()
-                .satisfies(m -> assertThat(m.roleInVisit()).isEqualTo("LEAD"));
+        assertThat(result.mechanics()).singleElement().satisfies(m -> {
+            assertThat(m.roleInVisit()).isEqualTo("LEAD");
+            assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID);
+        });
     }
 
     @ParameterizedTest
@@ -234,7 +241,8 @@ class ServiceVisitServiceImplTest {
                 new ServiceVisitUpdateDTO(MONDAY.atTime(10, 30)));
 
         assertThat(result.scheduledDate()).isEqualTo(MONDAY.atTime(10, 30));
-        assertThat(result.mechanics()).hasSize(1);
+        assertThat(result.mechanics()).singleElement()
+                .satisfies(m -> assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID));
     }
 
     @Test
@@ -329,10 +337,80 @@ class ServiceVisitServiceImplTest {
         verifyNoInteractions(serviceVisitRepository);
     }
 
+    // ---- mechanicId visibility ----
+
+    @Test
+    void adminSeesTheMechanicIdInTheVisitList() {
+        AppUser admin = user(1L, "admin", Role.ADMIN);
+        stubVisitList(admin);
+
+        PageResponse<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForCurrentUser(
+                "admin", null, null, null, null, null, null, null, null, null);
+
+        assertThat(result.content()).singleElement()
+                .satisfies(dto -> assertThat(dto.mechanics()).singleElement()
+                        .satisfies(m -> assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID)));
+    }
+
+    @Test
+    void customerGetsNoMechanicIdInTheVisitList() {
+        AppUser customer = user(2L, "owner", Role.CUSTOMER);
+        stubVisitList(customer);
+
+        PageResponse<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForCurrentUser(
+                "owner", null, null, null, null, null, null, null, null, null);
+
+        assertThat(result.content()).singleElement()
+                .satisfies(dto -> assertThat(dto.mechanics()).singleElement().satisfies(m -> {
+                    assertThat(m.mechanicName()).isEqualTo("Ivan Petrov");
+                    assertThat(m.mechanicId()).isNull();
+                }));
+    }
+
+    @Test
+    void mechanicGetsNoMechanicIdWhenStartingAVisit() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        when(appUserService.getByUsernameOrThrow("mech")).thenReturn(mechanic);
+        when(visitAssignmentRepository.findByServiceVisitIdAndMechanicId(VISIT_ID, MECHANIC_ID))
+                .thenReturn(Optional.of(lead(visit)));
+        when(serviceVisitRepository.save(visit)).thenReturn(visit);
+
+        ServiceVisitResponseDTO result = serviceVisitService.updateVisitStatus(VISIT_ID, VisitStatus.IN_PROGRESS, "mech");
+
+        assertThat(result.status()).isEqualTo("IN_PROGRESS");
+        assertThat(result.mechanics()).singleElement().satisfies(m -> assertThat(m.mechanicId()).isNull());
+    }
+
     // ---- helpers ----
 
     private void stubMechanic() {
         when(appUserService.getByIdOrThrow(MECHANIC_ID)).thenReturn(mechanic);
+    }
+
+    private void stubVisitList(AppUser caller) {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        when(appUserService.getByUsernameOrThrow(caller.getUsername())).thenReturn(caller);
+        when(serviceVisitRepository.findAll(ArgumentMatchers.<Specification<ServiceVisit>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(visit)));
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID)))
+                .thenReturn(List.of(lead(visit)));
+    }
+
+    private VisitAssignment lead(ServiceVisit visit) {
+        VisitAssignment lead = new VisitAssignment();
+        lead.setServiceVisit(visit);
+        lead.setMechanic(mechanic);
+        lead.setRoleInVisit(AssignmentRole.LEAD);
+        return lead;
+    }
+
+    private static AppUser user(Long id, String username, Role role) {
+        AppUser user = new AppUser();
+        user.setId(id);
+        user.setUsername(username);
+        user.setRole(role);
+        user.setEnabled(true);
+        return user;
     }
 
     private void verifyNothingBookedOrSaved() {
@@ -342,12 +420,8 @@ class ServiceVisitServiceImplTest {
 
     private ServiceVisit stubScheduledVisitWithLead(LocalDateTime start) {
         ServiceVisit visit = visit(VISIT_ID, start);
-        VisitAssignment lead = new VisitAssignment();
-        lead.setServiceVisit(visit);
-        lead.setMechanic(mechanic);
-        lead.setRoleInVisit(AssignmentRole.LEAD);
         when(serviceVisitRepository.findById(VISIT_ID)).thenReturn(Optional.of(visit));
-        when(visitAssignmentRepository.findByServiceVisitId(VISIT_ID)).thenReturn(List.of(lead));
+        when(visitAssignmentRepository.findByServiceVisitId(VISIT_ID)).thenReturn(List.of(lead(visit)));
         return visit;
     }
 

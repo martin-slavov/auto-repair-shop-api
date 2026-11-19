@@ -18,7 +18,7 @@ import java.util.List;
 public interface ServiceVisitRepository extends JpaRepository<ServiceVisit, Long>, JpaSpecificationExecutor<ServiceVisit> {
 
     @Override
-    @EntityGraph(attributePaths = "vehicle")
+    @EntityGraph(attributePaths = {"vehicle", "serviceRequest"})
     Page<ServiceVisit> findAll(Specification<ServiceVisit> spec, Pageable pageable);
 
     boolean existsByVehicleId(Long vehicleId);

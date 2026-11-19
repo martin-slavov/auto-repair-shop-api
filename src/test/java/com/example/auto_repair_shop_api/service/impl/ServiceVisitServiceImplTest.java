@@ -13,6 +13,7 @@ import com.example.auto_repair_shop_api.model.ServiceVisit;
 import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.VisitAssignment;
 import com.example.auto_repair_shop_api.model.enums.AssignmentRole;
+import com.example.auto_repair_shop_api.model.enums.RequestType;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.model.enums.VisitStatus;
 import com.example.auto_repair_shop_api.repository.ServiceVisitRepository;
@@ -95,9 +96,13 @@ class ServiceVisitServiceImplTest {
         vehicle = new Vehicle();
         vehicle.setId(7L);
         vehicle.setLicensePlate("CA1234AB");
+        vehicle.setManufacturer("Toyota");
+        vehicle.setModel("Corolla");
 
         serviceRequest = new ServiceRequest();
         serviceRequest.setId(3L);
+        serviceRequest.setType(RequestType.SERVICE);
+        serviceRequest.setDescription("Brakes squeak when stopping");
         serviceRequest.setVehicle(vehicle);
     }
 
@@ -122,6 +127,7 @@ class ServiceVisitServiceImplTest {
         assertThat(result.id()).isEqualTo(VISIT_ID);
         assertThat(result.status()).isEqualTo("SCHEDULED");
         assertThat(result.scheduledDate()).isEqualTo(start);
+        assertWorkDetails(result);
         assertThat(result.mechanics()).singleElement().satisfies(m -> {
             assertThat(m.roleInVisit()).isEqualTo("LEAD");
             assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID);
@@ -241,6 +247,7 @@ class ServiceVisitServiceImplTest {
                 new ServiceVisitUpdateDTO(MONDAY.atTime(10, 30)));
 
         assertThat(result.scheduledDate()).isEqualTo(MONDAY.atTime(10, 30));
+        assertWorkDetails(result);
         assertThat(result.mechanics()).singleElement()
                 .satisfies(m -> assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID));
     }
@@ -342,29 +349,51 @@ class ServiceVisitServiceImplTest {
     @Test
     void adminSeesTheMechanicIdInTheVisitList() {
         AppUser admin = user(1L, "admin", Role.ADMIN);
-        stubVisitList(admin);
+        stubVisitList(admin, visit(VISIT_ID, MONDAY.atTime(10, 0)));
 
         PageResponse<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForCurrentUser(
                 "admin", null, null, null, null, null, null, null, null, null);
 
-        assertThat(result.content()).singleElement()
-                .satisfies(dto -> assertThat(dto.mechanics()).singleElement()
-                        .satisfies(m -> assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID)));
+        assertThat(result.content()).singleElement().satisfies(dto -> {
+            assertWorkDetails(dto);
+            assertThat(dto.mechanics()).singleElement()
+                    .satisfies(m -> assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID));
+        });
+    }
+
+    @Test
+    void aVisitWithoutARequestIsListedWithNullRequestFields() {
+        AppUser admin = user(1L, "admin", Role.ADMIN);
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setServiceRequest(null);
+        stubVisitList(admin, visit);
+
+        PageResponse<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForCurrentUser(
+                "admin", null, null, null, null, null, null, null, null, null);
+
+        assertThat(result.content()).singleElement().satisfies(dto -> {
+            assertThat(dto.requestType()).isNull();
+            assertThat(dto.requestDescription()).isNull();
+            assertThat(dto.vehicleManufacturer()).isEqualTo("Toyota");
+            assertThat(dto.vehicleModel()).isEqualTo("Corolla");
+        });
     }
 
     @Test
     void customerGetsNoMechanicIdInTheVisitList() {
         AppUser customer = user(2L, "owner", Role.CUSTOMER);
-        stubVisitList(customer);
+        stubVisitList(customer, visit(VISIT_ID, MONDAY.atTime(10, 0)));
 
         PageResponse<ServiceVisitResponseDTO> result = serviceVisitService.getVisitsForCurrentUser(
                 "owner", null, null, null, null, null, null, null, null, null);
 
-        assertThat(result.content()).singleElement()
-                .satisfies(dto -> assertThat(dto.mechanics()).singleElement().satisfies(m -> {
-                    assertThat(m.mechanicName()).isEqualTo("Ivan Petrov");
-                    assertThat(m.mechanicId()).isNull();
-                }));
+        assertThat(result.content()).singleElement().satisfies(dto -> {
+            assertWorkDetails(dto);
+            assertThat(dto.mechanics()).singleElement().satisfies(m -> {
+                assertThat(m.mechanicName()).isEqualTo("Ivan Petrov");
+                assertThat(m.mechanicId()).isNull();
+            });
+        });
     }
 
     @Test
@@ -378,6 +407,7 @@ class ServiceVisitServiceImplTest {
         ServiceVisitResponseDTO result = serviceVisitService.updateVisitStatus(VISIT_ID, VisitStatus.IN_PROGRESS, "mech");
 
         assertThat(result.status()).isEqualTo("IN_PROGRESS");
+        assertWorkDetails(result);
         assertThat(result.mechanics()).singleElement().satisfies(m -> assertThat(m.mechanicId()).isNull());
     }
 
@@ -387,8 +417,14 @@ class ServiceVisitServiceImplTest {
         when(appUserService.getByIdOrThrow(MECHANIC_ID)).thenReturn(mechanic);
     }
 
-    private void stubVisitList(AppUser caller) {
-        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+    private static void assertWorkDetails(ServiceVisitResponseDTO dto) {
+        assertThat(dto.requestType()).isEqualTo("SERVICE");
+        assertThat(dto.requestDescription()).isEqualTo("Brakes squeak when stopping");
+        assertThat(dto.vehicleManufacturer()).isEqualTo("Toyota");
+        assertThat(dto.vehicleModel()).isEqualTo("Corolla");
+    }
+
+    private void stubVisitList(AppUser caller, ServiceVisit visit) {
         when(appUserService.getByUsernameOrThrow(caller.getUsername())).thenReturn(caller);
         when(serviceVisitRepository.findAll(ArgumentMatchers.<Specification<ServiceVisit>>any(), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(visit)));
@@ -431,6 +467,7 @@ class ServiceVisitServiceImplTest {
         visit.setStatus(VisitStatus.SCHEDULED);
         visit.setScheduledDate(start);
         visit.setVehicle(vehicle);
+        visit.setServiceRequest(serviceRequest);
         return visit;
     }
 

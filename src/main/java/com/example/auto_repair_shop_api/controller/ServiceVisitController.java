@@ -42,8 +42,10 @@ public class ServiceVisitController {
 
     @Operation(summary = "Search service visits (paged)",
             description = "Access: ADMIN, MECHANIC, CUSTOMER. Admins see all visits, mechanics see visits they are " +
-                    "assigned to, customers see visits of their own vehicles. `mechanics[].mechanicId` is filled " +
-                    "for admins only (null for other roles).")
+                    "assigned to, customers see visits of their own vehicles. Each visit includes the work to do " +
+                    "(`requestType`, `requestDescription` of the service request) and the vehicle " +
+                    "(`vehicleManufacturer`, `vehicleModel`). `mechanics[].mechanicId` is filled for admins only " +
+                    "(null for other roles).")
     @GetMapping
     public ResponseEntity<PageResponse<ServiceVisitResponseDTO>> getVisitsForCurrentUser(
             @Parameter(description = "Visit status: SCHEDULED, IN_PROGRESS, COMPLETED, INVOICED")

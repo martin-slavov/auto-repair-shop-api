@@ -2,7 +2,9 @@ package com.example.auto_repair_shop_api.mapper;
 
 import com.example.auto_repair_shop_api.dto.servicevisit.MechanicAssignmentDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
+import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.ServiceVisit;
+import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.VisitAssignment;
 import org.springframework.stereotype.Component;
 
@@ -27,10 +29,17 @@ public class ServiceVisitMapper {
                 ))
                 .toList();
 
+        ServiceRequest request = visit.getServiceRequest();
+        Vehicle vehicle = visit.getVehicle();
+
         return new ServiceVisitResponseDTO(
                 visit.getId(), visit.getStatus().name(), visit.getScheduledDate(),
                 visit.getCompletedDate(), visit.getTechnicalNotes(),
-                visit.getVehicle().getLicensePlate(), mechanics
+                vehicle.getLicensePlate(), mechanics,
+                request != null && request.getType() != null ? request.getType().name() : null,
+                request != null ? request.getDescription() : null,
+                vehicle.getManufacturer(),
+                vehicle.getModel()
         );
     }
 }

@@ -359,7 +359,7 @@ Request body field rules are in section 5.
 | `UserAdminDTO` | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
 | `VehicleResponseDTO` | `id`, `licensePlate`, `manufacturer`, `model`, `year`, `ownerId`, `ownerName` ("First Last"), `firstRegistrationDate` (nullable) |
 | `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable) |
-| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]` |
+| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]`, `requestType` (`SERVICE` / `INSPECTION` / `CONSULTATION`), `requestDescription` (the work to do), `vehicleManufacturer`, `vehicleModel`. `requestType` and `requestDescription` come from the service request the visit was created from and are `null` if the visit has no linked request |
 | `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed), `mechanicId` (the mechanic's user id; **ADMIN only**, `null` for MECHANIC and CUSTOMER) |
 | `VisitPartResponseDTO` | `id` (= part line id), `partName`, `quantity`, `priceAtTimeOfUse` (**line total** = unit price × quantity), `addedAt` |
 | `PartResponseDTO` (admin) | `id`, `name`, `serialNumber`, `unitCost`, `unitSellPrice`, `active` |
@@ -432,12 +432,26 @@ Visits are created only by approving a request. In the `PATCH .../status` and `P
 
 `mechanics[].mechanicId` is filled only when an ADMIN calls (the list and `PUT`); it is the value to pass as
 `mechanicId` to `available-slots` (4.5.2). Mechanics and customers get `null` (in the list and in the
-`PATCH .../status` and `PATCH .../complete` responses). Example `mechanics[]` for an admin:
+`PATCH .../status` and `PATCH .../complete` responses).
+
+Example `ServiceVisitResponseDTO` as an admin sees it (for a mechanic or customer, `mechanicId` is `null`):
 
 ```json
-"mechanics": [
-  { "mechanicName": "Ivan Petrov", "roleInVisit": "LEAD", "hoursWorked": 0.00, "mechanicId": 4 }
-]
+{
+  "id": 12,
+  "status": "SCHEDULED",
+  "scheduledDate": "2026-11-23T10:00:00",
+  "completedDate": null,
+  "technicalNotes": null,
+  "licensePlate": "CA1234AB",
+  "mechanics": [
+    { "mechanicName": "Ivan Petrov", "roleInVisit": "LEAD", "hoursWorked": 0.00, "mechanicId": 4 }
+  ],
+  "requestType": "SERVICE",
+  "requestDescription": "Brakes squeak when stopping",
+  "vehicleManufacturer": "Toyota",
+  "vehicleModel": "Corolla"
+}
 ```
 
 #### 4.5.1 Booking rules (approve and reschedule)
@@ -739,7 +753,8 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
   - `status` is an exact match: `status=COMPLETED` does **not** include invoiced visits. Use `status=INVOICED` for those.
   - Visibility: admin = all visits, mechanic = visits they are assigned to, customer = visits of their own vehicles.
   - Every role gets the same fields, so **customers also see `technicalNotes`, `hoursWorked` and mechanic
-    names**. The only difference: `mechanics[].mechanicId` is filled for admins and `null` for others. In the list, a mechanic sees **all** assignments of each visit, not only their own.
+    names**, and every role sees the request's `requestType` / `requestDescription` and the vehicle's
+    `vehicleManufacturer` / `vehicleModel`. The only difference: `mechanics[].mechanicId` is filled for admins and `null` for others. In the list, a mechanic sees **all** assignments of each visit, not only their own.
   - Only `LEAD` assignments are created by the API (on approve). `ASSISTANT` exists in the data model, but no
     endpoint adds an assistant.
 - **`GET /api/parts`**: ADMIN and MECHANIC get different shapes (`PartView`): `PartResponseDTO` with `unitCost`

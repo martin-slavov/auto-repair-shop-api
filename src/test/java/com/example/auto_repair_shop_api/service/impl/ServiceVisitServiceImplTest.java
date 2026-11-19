@@ -2,10 +2,15 @@ package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.config.BookingProperties;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.servicevisit.AssistantHoursDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.MechanicAssignmentDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
 import com.example.auto_repair_shop_api.exception.BookingConflictException;
+import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
+import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
+import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.ServiceVisitMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
@@ -32,6 +37,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -57,6 +63,9 @@ class ServiceVisitServiceImplTest {
     private static final long MECHANIC_ID = 4L;
     private static final long VISIT_ID = 12L;
     private static final long OTHER_VISIT_ID = 99L;
+    private static final long ASSISTANT_ID = 5L;
+    private static final long LEAD_ASSIGNMENT_ID = 30L;
+    private static final long ASSISTANT_ASSIGNMENT_ID = 31L;
 
     // "Now" is Thursday 2026-11-19 10:10. Monday 2026-11-23 is a normal future working day.
     private static final LocalDate MONDAY = LocalDate.of(2026, 11, 23);
@@ -77,6 +86,7 @@ class ServiceVisitServiceImplTest {
     private ServiceVisitServiceImpl serviceVisitService;
 
     private AppUser mechanic;
+    private AppUser assistantUser;
     private Vehicle vehicle;
     private ServiceRequest serviceRequest;
 
@@ -92,6 +102,10 @@ class ServiceVisitServiceImplTest {
         mechanic.setLastName("Petrov");
         mechanic.setRole(Role.MECHANIC);
         mechanic.setEnabled(true);
+
+        assistantUser = user(ASSISTANT_ID, "helper", Role.MECHANIC);
+        assistantUser.setFirstName("Georgi");
+        assistantUser.setLastName("Ivanov");
 
         vehicle = new Vehicle();
         vehicle.setId(7L);
@@ -356,6 +370,7 @@ class ServiceVisitServiceImplTest {
 
         assertThat(result.content()).singleElement().satisfies(dto -> {
             assertWorkDetails(dto);
+            assertThat(dto.myRole()).isNull();
             assertThat(dto.mechanics()).singleElement()
                     .satisfies(m -> assertThat(m.mechanicId()).isEqualTo(MECHANIC_ID));
         });
@@ -389,9 +404,11 @@ class ServiceVisitServiceImplTest {
 
         assertThat(result.content()).singleElement().satisfies(dto -> {
             assertWorkDetails(dto);
+            assertThat(dto.myRole()).isNull();
             assertThat(dto.mechanics()).singleElement().satisfies(m -> {
                 assertThat(m.mechanicName()).isEqualTo("Ivan Petrov");
                 assertThat(m.mechanicId()).isNull();
+                assertThat(m.assignmentId()).isNull();
             });
         });
     }
@@ -411,7 +428,311 @@ class ServiceVisitServiceImplTest {
         assertThat(result.mechanics()).singleElement().satisfies(m -> assertThat(m.mechanicId()).isNull());
     }
 
+    // ---- assistants: add ----
+
+    @Test
+    void addAssistantSavesAnAssistantAndReturnsEveryAssignment() {
+        ServiceVisit visit = stubVisit(VisitStatus.SCHEDULED);
+        when(appUserService.getByIdOrThrow(ASSISTANT_ID)).thenReturn(assistantUser);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID)))
+                .thenReturn(List.of(assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD)));
+        when(serviceVisitRepository.findByMechanicsAndStatusStartingBetween(
+                List.of(ASSISTANT_ID), ACTIVE, MONDAY.atTime(9, 0), MONDAY.atTime(11, 0)))
+                .thenReturn(List.of(visit));
+        when(visitAssignmentRepository.save(any(VisitAssignment.class))).thenAnswer(call -> {
+            VisitAssignment saved = call.getArgument(0);
+            saved.setId(ASSISTANT_ASSIGNMENT_ID);
+            return saved;
+        });
+
+        ServiceVisitResponseDTO result = serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID);
+
+        assertThat(result.mechanics()).containsExactly(
+                new MechanicAssignmentDTO("Ivan Petrov", "LEAD", new BigDecimal("0.00"), MECHANIC_ID, LEAD_ASSIGNMENT_ID),
+                new MechanicAssignmentDTO("Georgi Ivanov", "ASSISTANT", new BigDecimal("0.00"), ASSISTANT_ID, ASSISTANT_ASSIGNMENT_ID));
+        assertThat(result.myRole()).isNull();
+    }
+
+    @Test
+    void addAssistantRejectsAMechanicAlreadyOnTheVisit() {
+        ServiceVisit visit = stubVisit(VisitStatus.IN_PROGRESS);
+        when(appUserService.getByIdOrThrow(ASSISTANT_ID)).thenReturn(assistantUser);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID))).thenReturn(List.of(
+                assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD),
+                assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT)));
+
+        assertThatThrownBy(() -> serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(DuplicateResourceException.class)
+                .hasMessage("Mechanic is already assigned to this visit");
+
+        verify(visitAssignmentRepository, never()).save(any());
+    }
+
+    @Test
+    void addAssistantRejectsAUserWhoIsNotAMechanic() {
+        stubVisit(VisitStatus.SCHEDULED);
+        assistantUser.setRole(Role.CUSTOMER);
+        when(appUserService.getByIdOrThrow(ASSISTANT_ID)).thenReturn(assistantUser);
+
+        assertThatThrownBy(() -> serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("User with ID 5 is not a mechanic");
+
+        verifyNoInteractions(visitAssignmentRepository);
+    }
+
+    @Test
+    void addAssistantRejectsADisabledMechanic() {
+        stubVisit(VisitStatus.SCHEDULED);
+        assistantUser.setEnabled(false);
+        when(appUserService.getByIdOrThrow(ASSISTANT_ID)).thenReturn(assistantUser);
+
+        assertThatThrownBy(() -> serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Mechanic account is disabled");
+
+        verifyNoInteractions(visitAssignmentRepository);
+    }
+
+    @Test
+    void addAssistantRejectsAMechanicBookedOnAnotherVisit() {
+        ServiceVisit visit = stubVisit(VisitStatus.SCHEDULED);
+        when(appUserService.getByIdOrThrow(ASSISTANT_ID)).thenReturn(assistantUser);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID)))
+                .thenReturn(List.of(assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD)));
+        when(serviceVisitRepository.findByMechanicsAndStatusStartingBetween(
+                List.of(ASSISTANT_ID), ACTIVE, MONDAY.atTime(9, 0), MONDAY.atTime(11, 0)))
+                .thenReturn(List.of(visit(OTHER_VISIT_ID, MONDAY.atTime(10, 30))));
+
+        assertThatThrownBy(() -> serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(BookingConflictException.class)
+                .hasMessage("Mechanic is already booked at this time");
+
+        verify(visitAssignmentRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"COMPLETED", "INVOICED"})
+    void addAssistantRejectsAVisitThatIsNotScheduledOrInProgress(String status) {
+        stubVisit(VisitStatus.valueOf(status));
+
+        assertThatThrownBy(() -> serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessage("Assistants can only be changed on scheduled or in-progress visits");
+
+        verifyNoInteractions(appUserService, visitAssignmentRepository);
+    }
+
+    @Test
+    void addAssistantRejectsAFourthAssistant() {
+        ServiceVisit visit = stubVisit(VisitStatus.SCHEDULED);
+        when(appUserService.getByIdOrThrow(ASSISTANT_ID)).thenReturn(assistantUser);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID))).thenReturn(List.of(
+                assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD),
+                assignment(41L, visit, user(6L, "a1", Role.MECHANIC), AssignmentRole.ASSISTANT),
+                assignment(42L, visit, user(7L, "a2", Role.MECHANIC), AssignmentRole.ASSISTANT),
+                assignment(43L, visit, user(8L, "a3", Role.MECHANIC), AssignmentRole.ASSISTANT)));
+
+        assertThatThrownBy(() -> serviceVisitService.addAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("A visit can have at most 3 assistants");
+
+        verify(visitAssignmentRepository, never()).save(any());
+    }
+
+    // ---- assistants: remove ----
+
+    @Test
+    void removeAssistantDeletesTheAssignment() {
+        ServiceVisit visit = stubVisit(VisitStatus.IN_PROGRESS);
+        VisitAssignment lead = assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD);
+        VisitAssignment assistant = assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID)))
+                .thenReturn(List.of(lead, assistant));
+
+        ServiceVisitResponseDTO result = serviceVisitService.removeAssistant(VISIT_ID, ASSISTANT_ID);
+
+        verify(visitAssignmentRepository).delete(assistant);
+        assertThat(result.mechanics()).singleElement()
+                .satisfies(m -> assertThat(m.roleInVisit()).isEqualTo("LEAD"));
+    }
+
+    @Test
+    void removeAssistantRefusesTheLead() {
+        ServiceVisit visit = stubVisit(VisitStatus.SCHEDULED);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID)))
+                .thenReturn(List.of(assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD)));
+
+        assertThatThrownBy(() -> serviceVisitService.removeAssistant(VISIT_ID, MECHANIC_ID))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("The lead mechanic cannot be removed");
+
+        verify(visitAssignmentRepository, never()).delete(any());
+    }
+
+    @Test
+    void removeAssistantGives404ForAMechanicNotOnTheVisit() {
+        ServiceVisit visit = stubVisit(VisitStatus.SCHEDULED);
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID)))
+                .thenReturn(List.of(assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD)));
+
+        assertThatThrownBy(() -> serviceVisitService.removeAssistant(VISIT_ID, ASSISTANT_ID))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Mechanic is not assigned to this visit");
+    }
+
+    // ---- complete with assistants ----
+
+    @Test
+    void completeStoresTheHoursOfTheLeadAndEveryAssistant() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        VisitAssignment lead = assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD);
+        VisitAssignment assistant = assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT);
+        stubCompletingLead(lead, List.of(lead, assistant));
+        when(serviceVisitRepository.save(visit)).thenReturn(visit);
+
+        ServiceVisitResponseDTO result = serviceVisitService.completeVisit(VISIT_ID, "Replaced pads",
+                new BigDecimal("2.50"), List.of(new AssistantHoursDTO(ASSISTANT_ASSIGNMENT_ID, new BigDecimal("1.25"))),
+                "mech");
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(result.myRole()).isEqualTo("LEAD");
+        assertThat(lead.getHoursWorked()).isEqualByComparingTo("2.50");
+        assertThat(assistant.getHoursWorked()).isEqualByComparingTo("1.25");
+        verify(visitAssignmentRepository).saveAll(List.of(assistant));
+    }
+
+    @Test
+    void completeRejectsAMissingAssistant() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        VisitAssignment lead = assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD);
+        VisitAssignment assistant = assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT);
+        stubCompletingLead(lead, List.of(lead, assistant));
+
+        assertThatThrownBy(() -> serviceVisitService.completeVisit(VISIT_ID, "Replaced pads",
+                new BigDecimal("2.50"), null, "mech"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Hours are required for every assistant (missing assignment ids: 31)");
+
+        assertThat(visit.getStatus()).isEqualTo(VisitStatus.IN_PROGRESS);
+        verify(serviceVisitRepository, never()).save(any());
+    }
+
+    @Test
+    void completeRejectsTheLeadsOwnAssignmentAsAnAssistant() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        VisitAssignment lead = assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD);
+        stubCompletingLead(lead, List.of(lead));
+
+        assertThatThrownBy(() -> serviceVisitService.completeVisit(VISIT_ID, "Replaced pads", new BigDecimal("2.50"),
+                List.of(new AssistantHoursDTO(LEAD_ASSIGNMENT_ID, new BigDecimal("1.00"))), "mech"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("Unknown assistant assignment: 30");
+    }
+
+    @Test
+    void completeWithoutAssistantsAcceptsTheOldBody() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        VisitAssignment lead = assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD);
+        stubCompletingLead(lead, List.of(lead));
+        when(serviceVisitRepository.save(visit)).thenReturn(visit);
+
+        ServiceVisitResponseDTO result = serviceVisitService.completeVisit(
+                VISIT_ID, "Oil change", new BigDecimal("1.00"), null, "mech");
+
+        assertThat(result.status()).isEqualTo("COMPLETED");
+        assertThat(lead.getHoursWorked()).isEqualByComparingTo("1.00");
+    }
+
+    @Test
+    void anAssistantCannotCompleteTheVisit() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setStatus(VisitStatus.IN_PROGRESS);
+        when(appUserService.getByUsernameOrThrow("helper")).thenReturn(assistantUser);
+        when(visitAssignmentRepository.findByServiceVisitIdAndMechanicId(VISIT_ID, ASSISTANT_ID)).thenReturn(Optional.of(
+                assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT)));
+
+        assertThatThrownBy(() -> serviceVisitService.completeVisit(
+                VISIT_ID, "Done", new BigDecimal("1.00"), null, "helper"))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessage("Only the lead mechanic can complete a visit that is in progress");
+
+        assertThat(visit.getStatus()).isEqualTo(VisitStatus.IN_PROGRESS);
+    }
+
+    // ---- reschedule with an assistant ----
+
+    @Test
+    void rescheduleChecksTheAssistantToo() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(9, 0));
+        when(serviceVisitRepository.findById(VISIT_ID)).thenReturn(Optional.of(visit));
+        when(visitAssignmentRepository.findByServiceVisitId(VISIT_ID)).thenReturn(List.of(
+                assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD),
+                assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT)));
+        when(serviceVisitRepository.findByMechanicsAndStatusStartingBetween(
+                List.of(MECHANIC_ID, ASSISTANT_ID), ACTIVE, MONDAY.atTime(13, 0), MONDAY.atTime(15, 0)))
+                .thenReturn(List.of(visit(OTHER_VISIT_ID, MONDAY.atTime(14, 30))));
+
+        assertThatThrownBy(() -> serviceVisitService.updateVisit(VISIT_ID, new ServiceVisitUpdateDTO(MONDAY.atTime(14, 0))))
+                .isInstanceOf(BookingConflictException.class)
+                .hasMessage("Mechanic is already booked at this time");
+
+        verify(serviceVisitRepository, never()).save(any());
+    }
+
+    // ---- myRole ----
+
+    @Test
+    void leadAndAssistantSeeTheirOwnRoleInTheList() {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        List<VisitAssignment> team = List.of(
+                assignment(LEAD_ASSIGNMENT_ID, visit, mechanic, AssignmentRole.LEAD),
+                assignment(ASSISTANT_ASSIGNMENT_ID, visit, assistantUser, AssignmentRole.ASSISTANT));
+        when(appUserService.getByUsernameOrThrow("mech")).thenReturn(mechanic);
+        when(appUserService.getByUsernameOrThrow("helper")).thenReturn(assistantUser);
+        when(serviceVisitRepository.findAll(ArgumentMatchers.<Specification<ServiceVisit>>any(), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(visit)));
+        when(visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(VISIT_ID))).thenReturn(team);
+
+        ServiceVisitResponseDTO asLead = serviceVisitService.getVisitsForCurrentUser(
+                "mech", null, null, null, null, null, null, null, null, null).content().getFirst();
+        ServiceVisitResponseDTO asAssistant = serviceVisitService.getVisitsForCurrentUser(
+                "helper", null, null, null, null, null, null, null, null, null).content().getFirst();
+
+        assertThat(asLead.myRole()).isEqualTo("LEAD");
+        assertThat(asAssistant.myRole()).isEqualTo("ASSISTANT");
+        assertThat(asAssistant.mechanics()).extracting(MechanicAssignmentDTO::assignmentId)
+                .containsExactly(LEAD_ASSIGNMENT_ID, ASSISTANT_ASSIGNMENT_ID);
+        assertThat(asAssistant.mechanics()).extracting(MechanicAssignmentDTO::mechanicId).containsOnlyNulls();
+    }
+
     // ---- helpers ----
+
+    private ServiceVisit stubVisit(VisitStatus status) {
+        ServiceVisit visit = visit(VISIT_ID, MONDAY.atTime(10, 0));
+        visit.setStatus(status);
+        when(serviceVisitRepository.findById(VISIT_ID)).thenReturn(Optional.of(visit));
+        return visit;
+    }
+
+    private void stubCompletingLead(VisitAssignment lead, List<VisitAssignment> team) {
+        when(appUserService.getByUsernameOrThrow("mech")).thenReturn(mechanic);
+        when(visitAssignmentRepository.findByServiceVisitIdAndMechanicId(VISIT_ID, MECHANIC_ID)).thenReturn(Optional.of(lead));
+        when(visitAssignmentRepository.findByServiceVisitId(VISIT_ID)).thenReturn(team);
+    }
+
+    private static VisitAssignment assignment(Long id, ServiceVisit visit, AppUser user, AssignmentRole role) {
+        VisitAssignment assignment = new VisitAssignment();
+        assignment.setId(id);
+        assignment.setServiceVisit(visit);
+        assignment.setMechanic(user);
+        assignment.setRoleInVisit(role);
+        return assignment;
+    }
 
     private void stubMechanic() {
         when(appUserService.getByIdOrThrow(MECHANIC_ID)).thenReturn(mechanic);

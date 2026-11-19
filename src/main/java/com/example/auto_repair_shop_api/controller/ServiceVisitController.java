@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.controller;
 
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.AddAssistantDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.CompleteVisitDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
@@ -45,7 +46,9 @@ public class ServiceVisitController {
                     "assigned to, customers see visits of their own vehicles. Each visit includes the work to do " +
                     "(`requestType`, `requestDescription` of the service request) and the vehicle " +
                     "(`vehicleManufacturer`, `vehicleModel`). `mechanics[].mechanicId` is filled for admins only " +
-                    "(null for other roles).")
+                    "(null for other roles); `mechanics[].assignmentId` for admins and mechanics assigned to the " +
+                    "visit. `myRole` is the calling mechanic's role in the visit (LEAD / ASSISTANT), null for " +
+                    "admins and customers.")
     @GetMapping
     public ResponseEntity<PageResponse<ServiceVisitResponseDTO>> getVisitsForCurrentUser(
             @Parameter(description = "Visit status: SCHEDULED, IN_PROGRESS, COMPLETED, INVOICED")
@@ -88,14 +91,43 @@ public class ServiceVisitController {
     }
 
     @Operation(summary = "Complete a visit",
-            description = "Access: MECHANIC. Only the lead mechanic of the visit, while it is IN_PROGRESS. " +
-                    "Records the technical notes and hours worked. `mechanics[]` holds only the caller's " +
-                    "assignment, with `mechanicId` null.")
+            description = "Access: MECHANIC. Only the lead mechanic of the visit, while it is IN_PROGRESS (anyone " +
+                    "else assigned gets 400 \"Only the lead mechanic can complete a visit that is in progress\"). " +
+                    "Records the technical notes, the lead's `hoursWorked` and, in `assistantHours`, the hours of " +
+                    "every ASSISTANT keyed by `mechanics[].assignmentId` (exactly one entry per assistant; may be " +
+                    "omitted when there are none). An id that is not an assistant of this visit, a duplicate id " +
+                    "or a missing assistant gives 400. `mechanics[]` holds only the caller's assignment, with " +
+                    "`mechanicId` null.")
     @PatchMapping("/{id}/complete")
     public ResponseEntity<ServiceVisitResponseDTO> completeVisit(@PathVariable Long id, @Valid @RequestBody CompleteVisitDTO dto) {
 
         String name = SecurityUtils.getCurrentUsername();
-        ServiceVisitResponseDTO result = serviceVisitService.completeVisit(id, dto.technicalNotes(), dto.hoursWorked(), name);
+        ServiceVisitResponseDTO result = serviceVisitService.completeVisit(
+                id, dto.technicalNotes(), dto.hoursWorked(), dto.assistantHours(), name);
+        return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Add an assistant mechanic to a visit",
+            description = "Access: ADMIN. The visit must be SCHEDULED or IN_PROGRESS (400). The user must be an " +
+                    "enabled MECHANIC (404 unknown, 400 not a mechanic or disabled), not already on the visit " +
+                    "(409 \"Mechanic is already assigned to this visit\"), at most 3 assistants per visit (400), " +
+                    "and free for 60 minutes from the visit's scheduled start (409 \"Mechanic is already booked " +
+                    "at this time\"). Returns the visit with every assignment.")
+    @PostMapping("/{id}/mechanics")
+    public ResponseEntity<ServiceVisitResponseDTO> addAssistant(@PathVariable Long id, @Valid @RequestBody AddAssistantDTO dto) {
+
+        ServiceVisitResponseDTO result = serviceVisitService.addAssistant(id, dto.mechanicId());
+        return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Remove an assistant mechanic from a visit",
+            description = "Access: ADMIN. The visit must be SCHEDULED or IN_PROGRESS (400). `mechanicId` is the " +
+                    "user id (`mechanics[].mechanicId`). 404 if that mechanic is not on the visit, 400 \"The lead " +
+                    "mechanic cannot be removed\" for the LEAD. Returns the visit with the remaining assignments.")
+    @DeleteMapping("/{id}/mechanics/{mechanicId}")
+    public ResponseEntity<ServiceVisitResponseDTO> removeAssistant(@PathVariable Long id, @PathVariable Long mechanicId) {
+
+        ServiceVisitResponseDTO result = serviceVisitService.removeAssistant(id, mechanicId);
         return ResponseEntity.ok().body(result);
     }
 

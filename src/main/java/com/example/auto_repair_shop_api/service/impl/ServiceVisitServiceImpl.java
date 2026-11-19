@@ -2,15 +2,18 @@ package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.config.BookingProperties;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.servicevisit.AssistantHoursDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
 import com.example.auto_repair_shop_api.exception.BookingConflictException;
+import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import com.example.auto_repair_shop_api.mapper.ServiceVisitMapper;
+import com.example.auto_repair_shop_api.mapper.VisitViewer;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.ServiceVisit;
@@ -41,9 +44,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.assignedToMechanic;
@@ -68,6 +73,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     // Visits that block a mechanic's time.
     private static final List<VisitStatus> ACTIVE_STATUSES = List.of(VisitStatus.SCHEDULED, VisitStatus.IN_PROGRESS);
     static final String BOOKING_CONFLICT_MESSAGE = "Mechanic is already booked at this time";
+    static final int MAX_ASSISTANTS = 3;
 
     private final ServiceVisitRepository serviceVisitRepository;
     private final VisitAssignmentRepository visitAssignmentRepository;
@@ -113,7 +119,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
 
         VisitAssignment savedAssignment = visitAssignmentRepository.save(assignment);
 
-        return serviceVisitMapper.toResponseDto(savedVisit, savedAssignment, true);
+        return serviceVisitMapper.toResponseDto(savedVisit, savedAssignment, VisitViewer.ADMIN);
     }
 
     @Override
@@ -168,9 +174,9 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
                         .collect(Collectors.groupingBy(assignment -> assignment.getServiceVisit().getId()))
                 : Map.of();
 
-        boolean isAdmin = appUser.getRole() == Role.ADMIN;
+        VisitViewer viewer = VisitViewer.of(appUser);
         return PageResponse.from(result, visit ->
-                serviceVisitMapper.toResponseDto(visit, assignmentsByVisitId.getOrDefault(visit.getId(), List.of()), isAdmin));
+                serviceVisitMapper.toResponseDto(visit, assignmentsByVisitId.getOrDefault(visit.getId(), List.of()), viewer));
     }
 
     @Override
@@ -187,12 +193,13 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         serviceVisit.setStatus(newStatus);
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, assignment, false);
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignment, VisitViewer.of(assignment.getMechanic()));
     }
 
     @Override
     @Transactional
-    public ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, BigDecimal hoursWorked, String currentUsername) {
+    public ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, BigDecimal hoursWorked,
+                                                 List<AssistantHoursDTO> assistantHours, String currentUsername) {
 
         VisitAssignment assignment = getMechanicAssignmentOrThrow(visitId, currentUsername);
         ServiceVisit serviceVisit = assignment.getServiceVisit();
@@ -201,16 +208,76 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
             throw new InvalidStateTransitionException("Only the lead mechanic can complete a visit that is in progress");
         }
 
+        List<VisitAssignment> assistants = applyAssistantHours(visitId,
+                assistantHours != null ? assistantHours : List.of());
+
         serviceVisit.setStatus(VisitStatus.COMPLETED);
         serviceVisit.setTechnicalNotes(technicalNotes);
         serviceVisit.setCompletedDate(LocalDateTime.now());
 
         assignment.setHoursWorked(hoursWorked);
         visitAssignmentRepository.save(assignment);
+        visitAssignmentRepository.saveAll(assistants);
 
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, assignment, false);
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignment, VisitViewer.of(assignment.getMechanic()));
+    }
+
+    // ADMIN only: enforced in SecurityConfig.
+    @Override
+    @Transactional
+    public ServiceVisitResponseDTO addAssistant(Long visitId, Long mechanicId) {
+
+        ServiceVisit serviceVisit = getVisitWithEditableTeamOrThrow(visitId);
+        AppUser mechanic = getEnabledMechanicOrThrow(mechanicId);
+        List<VisitAssignment> assignments = visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(visitId));
+
+        if (assignments.stream().anyMatch(assignment -> assignment.getMechanic().getId().equals(mechanicId))) {
+            throw new DuplicateResourceException("Mechanic is already assigned to this visit");
+        }
+
+        long assistantCount = assignments.stream()
+                .filter(assignment -> assignment.getRoleInVisit() == AssignmentRole.ASSISTANT)
+                .count();
+        if (assistantCount >= MAX_ASSISTANTS) {
+            throw new IllegalArgumentException("A visit can have at most " + MAX_ASSISTANTS + " assistants");
+        }
+
+        checkNotBooked(List.of(mechanicId), serviceVisit.getScheduledDate(), visitId);
+
+        VisitAssignment assistant = new VisitAssignment();
+        assistant.setServiceVisit(serviceVisit);
+        assistant.setMechanic(mechanic);
+        assistant.setRoleInVisit(AssignmentRole.ASSISTANT);
+        VisitAssignment savedAssistant = visitAssignmentRepository.save(assistant);
+
+        List<VisitAssignment> updated = new ArrayList<>(assignments);
+        updated.add(savedAssistant);
+        return serviceVisitMapper.toResponseDto(serviceVisit, updated, VisitViewer.ADMIN);
+    }
+
+    // ADMIN only: enforced in SecurityConfig.
+    @Override
+    @Transactional
+    public ServiceVisitResponseDTO removeAssistant(Long visitId, Long mechanicId) {
+
+        ServiceVisit serviceVisit = getVisitWithEditableTeamOrThrow(visitId);
+        List<VisitAssignment> assignments = visitAssignmentRepository.findByServiceVisitIdInOrderByIdAsc(List.of(visitId));
+
+        VisitAssignment toRemove = assignments.stream()
+                .filter(assignment -> assignment.getMechanic().getId().equals(mechanicId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException("Mechanic is not assigned to this visit"));
+
+        if (toRemove.getRoleInVisit() == AssignmentRole.LEAD) {
+            throw new IllegalArgumentException("The lead mechanic cannot be removed");
+        }
+
+        visitAssignmentRepository.delete(toRemove);
+
+        List<VisitAssignment> remaining = assignments.stream().filter(assignment -> assignment != toRemove).toList();
+        return serviceVisitMapper.toResponseDto(serviceVisit, remaining, VisitViewer.ADMIN);
     }
 
     // ADMIN only: enforced in SecurityConfig.
@@ -229,7 +296,7 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         serviceVisit.setScheduledDate(dto.scheduledDate());
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, assignments, true);
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignments, VisitViewer.ADMIN);
     }
 
     // ADMIN only: enforced in SecurityConfig.
@@ -345,6 +412,42 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
 
     private boolean overlaps(LocalDateTime startA, LocalDateTime startB) {
         return Duration.between(startA, startB).abs().compareTo(booking.visitDuration()) < 0;
+    }
+
+    private ServiceVisit getVisitWithEditableTeamOrThrow(Long visitId) {
+        ServiceVisit serviceVisit = serviceVisitRepository.findById(visitId)
+                .orElseThrow(() -> new ResourceNotFoundException("Service visit not found with ID: " + visitId));
+
+        if (serviceVisit.getStatus() != VisitStatus.SCHEDULED && serviceVisit.getStatus() != VisitStatus.IN_PROGRESS) {
+            throw new InvalidStateTransitionException("Assistants can only be changed on scheduled or in-progress visits");
+        }
+
+        return serviceVisit;
+    }
+
+    private List<VisitAssignment> applyAssistantHours(Long visitId, List<AssistantHoursDTO> assistantHours) {
+        Map<Long, VisitAssignment> assistantsById = visitAssignmentRepository.findByServiceVisitId(visitId).stream()
+                .filter(assignment -> assignment.getRoleInVisit() == AssignmentRole.ASSISTANT)
+                .collect(Collectors.toMap(VisitAssignment::getId, assignment -> assignment));
+
+        Set<Long> seen = new HashSet<>();
+        for (AssistantHoursDTO entry : assistantHours) {
+            if (!assistantsById.containsKey(entry.assignmentId())) {
+                throw new IllegalArgumentException("Unknown assistant assignment: " + entry.assignmentId());
+            }
+            if (!seen.add(entry.assignmentId())) {
+                throw new IllegalArgumentException("Duplicate assistant assignment: " + entry.assignmentId());
+            }
+        }
+
+        List<Long> missing = assistantsById.keySet().stream().filter(id -> !seen.contains(id)).sorted().toList();
+        if (!missing.isEmpty()) {
+            throw new IllegalArgumentException("Hours are required for every assistant (missing assignment ids: "
+                    + missing.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")");
+        }
+
+        assistantHours.forEach(entry -> assistantsById.get(entry.assignmentId()).setHoursWorked(entry.hoursWorked()));
+        return List.copyOf(assistantsById.values());
     }
 
     private ServiceVisit getScheduledVisitOrThrow(Long visitId, String action) {

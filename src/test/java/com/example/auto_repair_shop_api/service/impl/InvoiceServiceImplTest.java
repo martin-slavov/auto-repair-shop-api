@@ -12,6 +12,7 @@ import com.example.auto_repair_shop_api.model.ServiceVisit;
 import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.VisitAssignment;
 import com.example.auto_repair_shop_api.model.VisitPart;
+import com.example.auto_repair_shop_api.model.enums.AssignmentRole;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.model.enums.VisitStatus;
 import com.example.auto_repair_shop_api.repository.InvoiceRepository;
@@ -166,6 +167,43 @@ class InvoiceServiceImplTest {
         assertThat(detail.totalPrice()).isEqualByComparingTo(sumOfLines.add(labour));
         detail.partLines().forEach(line -> assertThat(line.unitPrice()
                 .multiply(BigDecimal.valueOf(line.quantity()))).isEqualByComparingTo(line.lineTotal()));
+    }
+
+    @Test
+    void labourCoversTheLeadAndTheAssistants() {
+        visit.setStatus(VisitStatus.COMPLETED);
+        VisitAssignment lead = assignment("2.50");
+        lead.setRoleInVisit(AssignmentRole.LEAD);
+        VisitAssignment assistant = assignment("1.25");
+        assistant.setRoleInVisit(AssignmentRole.ASSISTANT);
+        VisitAssignment secondAssistant = assignment("0.75");
+        secondAssistant.setRoleInVisit(AssignmentRole.ASSISTANT);
+        when(serviceVisitRepository.findById(VISIT_ID)).thenReturn(Optional.of(visit));
+        when(visitPartRepository.findByServiceVisitId(VISIT_ID)).thenReturn(List.of());
+        when(visitPartRepository.findByServiceVisitIdOrderByIdAsc(VISIT_ID)).thenReturn(List.of());
+        when(visitAssignmentRepository.findByServiceVisitId(VISIT_ID)).thenReturn(List.of(lead, assistant, secondAssistant));
+        when(invoiceRepository.save(any(Invoice.class))).thenAnswer(call -> {
+            Invoice saved = call.getArgument(0);
+            saved.setId(INVOICE_ID);
+            return saved;
+        });
+
+        InvoiceResponseDTO created = invoiceService.createInvoice(VISIT_ID);
+        Invoice stored = new Invoice();
+        stored.setId(created.id());
+        stored.setInvoiceNumber(created.invoiceNumber());
+        stored.setVisit(visit);
+        stored.setPartsPrice(created.partsPrice());
+        stored.setLaborPrice(created.laborPrice());
+        stored.setTotalPrice(created.totalPrice());
+        stubInvoice(stored);
+        stubUser(admin);
+
+        InvoiceDetailDTO detail = invoiceService.getInvoiceById(INVOICE_ID, "admin");
+
+        assertThat(created.laborPrice()).isEqualByComparingTo("135.00");
+        assertThat(detail.laborHours()).isEqualByComparingTo("4.50");
+        assertThat(detail.laborHours().multiply(detail.laborRate())).isEqualByComparingTo(detail.laborPrice());
     }
 
     @Test

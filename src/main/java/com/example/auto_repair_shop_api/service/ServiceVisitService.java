@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.service;
 
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.servicevisit.AssistantHoursDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
@@ -24,7 +25,12 @@ public interface ServiceVisitService {
 
     ServiceVisitResponseDTO updateVisitStatus(Long visitId, VisitStatus newStatus, String currentUsername);
 
-    ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, BigDecimal hoursWorked, String currentUsername);
+    ServiceVisitResponseDTO completeVisit(Long visitId, String technicalNotes, BigDecimal hoursWorked,
+                                          List<AssistantHoursDTO> assistantHours, String currentUsername);
+
+    ServiceVisitResponseDTO addAssistant(Long visitId, Long mechanicId);
+
+    ServiceVisitResponseDTO removeAssistant(Long visitId, Long mechanicId);
 
     ServiceVisitResponseDTO updateVisit(Long visitId, ServiceVisitUpdateDTO dto);
 

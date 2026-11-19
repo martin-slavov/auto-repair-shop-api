@@ -166,6 +166,7 @@ Every error produced by the application has this shape:
 | `400` | Range filter inverted | `"yearFrom must not be greater than yearTo"`, `"issuedFrom must not be after issuedTo"` |
 | `400` | Action not allowed in the current status | `"Only pending requests can be approved"`, `"Invalid status transition"`, `"Visit status must be COMPLETED"` |
 | `400` | Booking rule (approve / reschedule, see 4.5.1) | `"Scheduled date must be on a working day (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)"`, `"Scheduled time must be between 09:00 and 16:00 (working hours 09:00-17:00, a visit takes 60 minutes)"`, `"Scheduled time must start on a 30-minute slot (e.g. 09:00, 09:30)"` |
+| `400` | Assistants (4.5.3, 5.11) | `"A visit can have at most 3 assistants"`, `"The lead mechanic cannot be removed"`, `"Assistants can only be changed on scheduled or in-progress visits"`, `"Hours are required for every assistant (missing assignment ids: 31)"`, `"Unknown assistant assignment: 30"` |
 | `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Mechanic account is disabled"`, `"Current password is incorrect"`, `"You cannot disable your own account"` |
 | `401` | Not logged in, token expired/invalid, account disabled | `"Authentication is required"` |
 | `401` | Login failed | `"Invalid username or password"` |
@@ -175,7 +176,8 @@ Every error produced by the application has this shape:
 | `403` | Unknown URL, or a real path called with a method that has no rule (logged-in user) | `"You don't have permission to access this resource"` |
 | `409` | Duplicate unique value | `"Username is already taken"`, `"Vehicle with this license plate already exists"`, `"Part with this serial number already exists"`, `"Catalog item with this name already exists"` |
 | `409` | Resource still in use | `"Vehicle cannot be deleted because it has service requests or visits"`, `"Cannot disable the last enabled admin"` |
-| `409` | Mechanic already booked (approve / reschedule) | `"Mechanic is already booked at this time"` |
+| `409` | Mechanic already booked (approve / reschedule / add assistant) | `"Mechanic is already booked at this time"` |
+| `409` | Mechanic already on the visit (add assistant) | `"Mechanic is already assigned to this visit"` |
 | `409` | Database constraint | `"The data conflicts with existing data"` |
 
 Also possible: `415 "Unsupported Media Type"` (body not JSON) and `500 "Unexpected error"`. `404 "Not Found"`
@@ -359,8 +361,8 @@ Request body field rules are in section 5.
 | `UserAdminDTO` | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
 | `VehicleResponseDTO` | `id`, `licensePlate`, `manufacturer`, `model`, `year`, `ownerId`, `ownerName` ("First Last"), `firstRegistrationDate` (nullable) |
 | `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable) |
-| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]`, `requestType` (`SERVICE` / `INSPECTION` / `CONSULTATION`), `requestDescription` (the work to do), `vehicleManufacturer`, `vehicleModel`. `requestType` and `requestDescription` come from the service request the visit was created from and are `null` if the visit has no linked request |
-| `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed), `mechanicId` (the mechanic's user id; **ADMIN only**, `null` for MECHANIC and CUSTOMER) |
+| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]`, `requestType` (`SERVICE` / `INSPECTION` / `CONSULTATION`), `requestDescription` (the work to do), `vehicleManufacturer`, `vehicleModel`, `myRole` (the calling mechanic's role in the visit, `LEAD` / `ASSISTANT`; `null` for ADMIN and CUSTOMER). `requestType` and `requestDescription` come from the service request the visit was created from and are `null` if the visit has no linked request |
+| `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed), `mechanicId` (the mechanic's user id; **ADMIN only**, `null` for MECHANIC and CUSTOMER), `assignmentId` (id of this assignment; ADMIN and mechanics assigned to the visit, `null` for CUSTOMER) |
 | `VisitPartResponseDTO` | `id` (= part line id), `partName`, `quantity`, `priceAtTimeOfUse` (**line total** = unit price × quantity), `addedAt` |
 | `PartResponseDTO` (admin) | `id`, `name`, `serialNumber`, `unitCost`, `unitSellPrice`, `active` |
 | `PartCatalogDTO` (mechanic) | `id`, `name`, `serialNumber`, `unitSellPrice`, `active` |
@@ -371,7 +373,8 @@ Request body field rules are in section 5.
 | `InvoicePartLineDTO` (in `partLines[]`) | `partName`, `quantity`, `unitPrice` (= `lineTotal` ÷ `quantity`, 2 decimals), `lineTotal` (= the part line's `priceAtTimeOfUse`) |
 
 Responses contain no ids for the linked vehicle, request or visit (only `licensePlate`), except
-`VehicleResponseDTO.ownerId` and `MechanicAssignmentDTO.mechanicId` (admin only).
+`VehicleResponseDTO.ownerId`, `MechanicAssignmentDTO.mechanicId` (admin only) and
+`MechanicAssignmentDTO.assignmentId` (admin and assigned mechanics).
 
 ### 4.1 Auth
 
@@ -421,38 +424,53 @@ After a request is created, an email notification goes to the shop asynchronousl
 |--------|------|-------|------|---------|----------|
 | GET | `/api/service-visits` | ADMIN, MECHANIC, CUSTOMER | — | 200 | `PageResponse<ServiceVisitResponseDTO>` |
 | PATCH | `/api/service-visits/{id}/status` | MECHANIC (assigned) | `UpdateVisitStatusDTO` | 200 | `ServiceVisitResponseDTO` |
-| PATCH | `/api/service-visits/{id}/complete` | MECHANIC (lead) | `CompleteVisitDTO` | 200 | `ServiceVisitResponseDTO` |
+| PATCH | `/api/service-visits/{id}/complete` | MECHANIC (lead) | `CompleteVisitDTO` | 200 | `ServiceVisitResponseDTO` (hours of every assistant required, see 5.11) |
+| POST | `/api/service-visits/{id}/mechanics` | ADMIN | `AddAssistantDTO` | 200 | `ServiceVisitResponseDTO` (all assignments; see 4.5.3) |
+| DELETE | `/api/service-visits/{id}/mechanics/{mechanicId}` | ADMIN | — | 200 | `ServiceVisitResponseDTO` (remaining assignments; see 4.5.3) |
 | GET | `/api/service-visits/available-slots` | ADMIN | — | 200 | `AvailableSlotDTO[]` (plain array, see 4.5.2) |
 | PUT | `/api/service-visits/{id}` | ADMIN | `ServiceVisitUpdateDTO` | 200 | `ServiceVisitResponseDTO` (SCHEDULED only; booking rules in 4.5.1, 409 if a mechanic is booked) |
 | DELETE | `/api/service-visits/{id}` | ADMIN | — | 204 | — (SCHEDULED, no parts; request → PENDING) |
 | PATCH | `/api/service-visits/{id}/invoice` | ADMIN | — | 201 | `InvoiceResponseDTO` (visit must be COMPLETED; visit → INVOICED) |
 
 Visits are created only by approving a request. In the `PATCH .../status` and `PATCH .../complete` responses,
-`mechanics[]` contains **only the calling mechanic's** assignment. The list and `PUT` responses contain all assignments.
+`mechanics[]` contains **only the calling mechanic's** assignment. The list, `PUT` and `POST` / `DELETE .../mechanics`
+responses contain all assignments.
 
-`mechanics[].mechanicId` is filled only when an ADMIN calls (the list and `PUT`); it is the value to pass as
-`mechanicId` to `available-slots` (4.5.2). Mechanics and customers get `null` (in the list and in the
-`PATCH .../status` and `PATCH .../complete` responses).
+Who sees which ids and `myRole`:
 
-Example `ServiceVisitResponseDTO` as an admin sees it (for a mechanic or customer, `mechanicId` is `null`):
+| Caller | `mechanics[].mechanicId` (user id) | `mechanics[].assignmentId` | `myRole` |
+|--------|------------------------------------|----------------------------|----------|
+| ADMIN | yes | yes | `null` |
+| MECHANIC assigned to the visit (lead or assistant) | `null` | yes | `LEAD` / `ASSISTANT` |
+| CUSTOMER | `null` | `null` | `null` |
+
+`mechanicId` is the value to pass to `available-slots` (4.5.2) and to `DELETE .../mechanics/{mechanicId}` (4.5.3).
+`assignmentId` is what the lead sends in `assistantHours` when completing (5.11).
+
+Example `ServiceVisitResponseDTO` as an admin sees it:
 
 ```json
 {
   "id": 12,
-  "status": "SCHEDULED",
+  "status": "IN_PROGRESS",
   "scheduledDate": "2026-11-23T10:00:00",
   "completedDate": null,
   "technicalNotes": null,
   "licensePlate": "CA1234AB",
   "mechanics": [
-    { "mechanicName": "Ivan Petrov", "roleInVisit": "LEAD", "hoursWorked": 0.00, "mechanicId": 4 }
+    { "mechanicName": "Ivan Petrov", "roleInVisit": "LEAD", "hoursWorked": 0.00, "mechanicId": 4, "assignmentId": 30 },
+    { "mechanicName": "Georgi Ivanov", "roleInVisit": "ASSISTANT", "hoursWorked": 0.00, "mechanicId": 5, "assignmentId": 31 }
   ],
   "requestType": "SERVICE",
   "requestDescription": "Brakes squeak when stopping",
   "vehicleManufacturer": "Toyota",
-  "vehicleModel": "Corolla"
+  "vehicleModel": "Corolla",
+  "myRole": null
 }
 ```
+
+The same visit in the assistant's list: both `mechanicId` values are `null`, the `assignmentId` values stay, and
+`"myRole": "ASSISTANT"`. A customer gets `null` for all three.
 
 #### 4.5.1 Booking rules (approve and reschedule)
 
@@ -507,6 +525,33 @@ for a mechanic with a visit at 11:00 (10:30, 11:00 and 11:30 are blocked):
 
 A slot shown as available can still be taken before you approve or reschedule, so always handle the `409`.
 The endpoint covers one mechanic; for a visit that also has an assistant, the reschedule checks all of them.
+
+#### 4.5.3 Assistant mechanics — ADMIN
+
+A visit has one `LEAD` (chosen on approve, cannot be removed or changed) and up to **3** `ASSISTANT` mechanics.
+Assistants see the visit in their list, can start it (`PATCH .../status`) and manage its parts like the lead.
+Only the lead can complete it.
+
+`POST /api/service-visits/{id}/mechanics` with `{ "mechanicId": 5 }` adds an assistant. Checks, in this order:
+
+| Check | Error |
+|-------|-------|
+| `mechanicId` sent | `400` `"Validation failed"`, `fieldErrors.mechanicId: "Mechanic ID is required"` |
+| visit exists | `404` `"Service visit not found with ID: 12"` |
+| visit is `SCHEDULED` or `IN_PROGRESS` | `400` `"Assistants can only be changed on scheduled or in-progress visits"` |
+| user exists | `404` `"User not found with id: 5"` |
+| user is a mechanic / enabled | `400` `"User with ID 5 is not a mechanic"` / `"Mechanic account is disabled"` |
+| not already on the visit (as lead or assistant) | `409` `"Mechanic is already assigned to this visit"` |
+| fewer than 3 assistants | `400` `"A visit can have at most 3 assistants"` |
+| free for 60 minutes from the visit's `scheduledDate` (4.5.1 double-booking rule, this visit ignored) | `409` `"Mechanic is already booked at this time"` |
+
+Working day / hours / slot rules are not re-checked here (the visit's time was checked when it was set).
+
+`DELETE /api/service-visits/{id}/mechanics/{mechanicId}` removes an assistant (`mechanicId` = user id from
+`mechanics[].mechanicId`). Visit missing → `404`; wrong status → the same `400` as above; mechanic not on the visit
+→ `404 "Mechanic is not assigned to this visit"`; the lead → `400 "The lead mechanic cannot be removed"`.
+
+Both return `200` with the visit as an admin sees it (all remaining assignments, with ids).
 
 ### 4.6 Visit parts
 
@@ -664,7 +709,36 @@ The vehicle of a request cannot be changed.
 | Field | Type | Required | Length | Other |
 |-------|------|----------|--------|-------|
 | `technicalNotes` | string | yes | max 5000 | |
-| `hoursWorked` | decimal | yes | — | > 0; `@Digits(3, 2)` (max 999.99) |
+| `hoursWorked` | decimal | yes | — | the lead's hours; > 0; `@Digits(3, 2)` (max 999.99) |
+| `assistantHours` | array | when the visit has assistants | — | one entry per ASSISTANT: `{ "assignmentId": 31, "hoursWorked": 1.25 }`. May be omitted or `[]` when there are no assistants |
+| `assistantHours[].assignmentId` | long | yes | — | `mechanics[].assignmentId` of an assistant on this visit |
+| `assistantHours[].hoursWorked` | decimal | yes | — | same rules and messages as `hoursWorked` |
+
+Field errors come back as e.g. `fieldErrors["assistantHours[0].hoursWorked"]`. After the lead/status check, the
+service checks the list (all `400`, nothing is saved):
+
+- an id that is not an assistant of this visit (including the lead's own) → `"Unknown assistant assignment: 30"`
+- the same id twice → `"Duplicate assistant assignment: 31"`
+- an assistant without an entry → `"Hours are required for every assistant (missing assignment ids: 31, 32)"`
+
+Anyone assigned but not the lead gets `400 "Only the lead mechanic can complete a visit that is in progress"`.
+The invoice labour is the hourly rate × the hours of **all** assignments (lead and assistants).
+
+Example:
+
+```json
+{
+  "technicalNotes": "Replaced front pads and discs",
+  "hoursWorked": 2.50,
+  "assistantHours": [ { "assignmentId": 31, "hoursWorked": 1.25 } ]
+}
+```
+
+### 5.11a AddAssistantDTO
+
+| Field | Type | Required | Other |
+|-------|------|----------|-------|
+| `mechanicId` | long | yes | user id of an enabled MECHANIC; other rules in 4.5.3 |
 
 ### 5.12 PartCreateDTO
 
@@ -732,7 +806,9 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
 - **`SCHEDULED` → `IN_PROGRESS`**: an assigned MECHANIC (`PATCH /status` with `newStatus: IN_PROGRESS`).
 - **add parts**: an assigned MECHANIC, only while `IN_PROGRESS`. Change/remove parts: ADMIN or an assigned
   MECHANIC, until `COMPLETED`.
-- **`IN_PROGRESS` → `COMPLETED`**: the **LEAD** mechanic only (`PATCH /complete`, sets notes, hours and `completedDate`).
+- **add / remove assistants**: ADMIN, while `SCHEDULED` or `IN_PROGRESS` (4.5.3). The lead never changes.
+- **`IN_PROGRESS` → `COMPLETED`**: the **LEAD** mechanic only (`PATCH /complete`, sets notes, the hours of the lead
+  and of every assistant, and `completedDate`).
 - **`COMPLETED` → `INVOICED`**: ADMIN (`PATCH /invoice`, creates the invoice).
 - **`INVOICED` → `COMPLETED`**: automatically when an ADMIN deletes the unpaid invoice.
 - There is no way back from `IN_PROGRESS` to `SCHEDULED`.
@@ -755,8 +831,9 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
   - Every role gets the same fields, so **customers also see `technicalNotes`, `hoursWorked` and mechanic
     names**, and every role sees the request's `requestType` / `requestDescription` and the vehicle's
     `vehicleManufacturer` / `vehicleModel`. The only difference: `mechanics[].mechanicId` is filled for admins and `null` for others. In the list, a mechanic sees **all** assignments of each visit, not only their own.
-  - Only `LEAD` assignments are created by the API (on approve). `ASSISTANT` exists in the data model, but no
-    endpoint adds an assistant.
+  - The `LEAD` is created on approve; an ADMIN adds or removes `ASSISTANT` mechanics with
+    `POST` / `DELETE /api/service-visits/{id}/mechanics` (4.5.3). Use `myRole` to show or hide the "Complete"
+    action for a mechanic (only `LEAD` can complete).
 - **`GET /api/parts`**: ADMIN and MECHANIC get different shapes (`PartView`): `PartResponseDTO` with `unitCost`
   vs `PartCatalogDTO` without it. Sorting by `unitCost` is admin only (mechanic → 400). Mechanics only see
   active parts.

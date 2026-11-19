@@ -17,5 +17,8 @@ public record ServiceVisitResponseDTO(
         @Schema(description = "Vehicle manufacturer", example = "Toyota")
         String vehicleManufacturer,
         @Schema(description = "Vehicle model", example = "Corolla")
-        String vehicleModel) {
+        String vehicleModel,
+        @Schema(description = "The calling mechanic's role in this visit: LEAD or ASSISTANT. Null for ADMIN and " +
+                "CUSTOMER", nullable = true, example = "LEAD")
+        String myRole) {
 }

@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.exception.handler;
 
 import com.example.auto_repair_shop_api.dto.error.ErrorResponse;
+import com.example.auto_repair_shop_api.exception.BookingConflictException;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.exception.InvalidSortParameterException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
@@ -52,6 +53,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceInUseException.class)
     public ResponseEntity<ErrorResponse> handleResourceInUse(ResourceInUseException ex) {
+        return build(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    // The mechanic already has an overlapping SCHEDULED / IN_PROGRESS visit.
+    @ExceptionHandler(BookingConflictException.class)
+    public ResponseEntity<ErrorResponse> handleBookingConflict(BookingConflictException ex) {
         return build(HttpStatus.CONFLICT, ex.getMessage());
     }
 

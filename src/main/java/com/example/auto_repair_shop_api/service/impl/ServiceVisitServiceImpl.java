@@ -1,8 +1,11 @@
 package com.example.auto_repair_shop_api.service.impl;
 
+import com.example.auto_repair_shop_api.config.BookingProperties;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
+import com.example.auto_repair_shop_api.exception.BookingConflictException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
@@ -31,11 +34,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.example.auto_repair_shop_api.repository.specification.ServiceVisitSpecifications.assignedToMechanic;
@@ -57,35 +65,38 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     );
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "scheduledDate");
 
+    // Visits that block a mechanic's time.
+    private static final List<VisitStatus> ACTIVE_STATUSES = List.of(VisitStatus.SCHEDULED, VisitStatus.IN_PROGRESS);
+    static final String BOOKING_CONFLICT_MESSAGE = "Mechanic is already booked at this time";
+
     private final ServiceVisitRepository serviceVisitRepository;
     private final VisitAssignmentRepository visitAssignmentRepository;
     private final AppUserService appUserService;
     private final ServiceVisitMapper serviceVisitMapper;
     private final VisitPartRepository visitPartRepository;
+    private final BookingProperties booking;
+    private final Clock clock;
 
     @Autowired
     public ServiceVisitServiceImpl(ServiceVisitRepository serviceVisitRepository, VisitAssignmentRepository visitAssignmentRepository, AppUserService appUserService, ServiceVisitMapper serviceVisitMapper,
-                                   VisitPartRepository visitPartRepository) {
+                                   VisitPartRepository visitPartRepository, BookingProperties booking, Clock clock) {
         this.serviceVisitRepository = serviceVisitRepository;
         this.visitAssignmentRepository = visitAssignmentRepository;
         this.appUserService = appUserService;
         this.serviceVisitMapper = serviceVisitMapper;
         this.visitPartRepository = visitPartRepository;
+        this.booking = booking;
+        this.clock = clock;
     }
 
     @Override
     @Transactional
     public ServiceVisitResponseDTO createVisitFromRequest(ServiceRequest serviceRequest, Long mechanicId, LocalDateTime scheduledDate) {
 
-        AppUser mechanic = appUserService.getByIdOrThrow(mechanicId);
+        AppUser mechanic = getEnabledMechanicOrThrow(mechanicId);
 
-        if (mechanic.getRole() != Role.MECHANIC) {
-            throw new IllegalArgumentException("User with ID " + mechanicId + " is not a mechanic");
-        }
-
-        if (!mechanic.isEnabled()) {
-            throw new IllegalArgumentException("Mechanic account is disabled");
-        }
+        validateSlot(scheduledDate);
+        checkNotBooked(List.of(mechanicId), scheduledDate, null);
 
         ServiceVisit serviceVisit = new ServiceVisit();
         serviceVisit.setStatus(VisitStatus.SCHEDULED);
@@ -207,11 +218,47 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
     public ServiceVisitResponseDTO updateVisit(Long visitId, ServiceVisitUpdateDTO dto) {
 
         ServiceVisit serviceVisit = getScheduledVisitOrThrow(visitId, "rescheduled");
+        List<VisitAssignment> assignments = visitAssignmentRepository.findByServiceVisitId(visitId);
+
+        validateSlot(dto.scheduledDate());
+        // Every assigned mechanic (lead or assistant) must be free; the visit itself does not count.
+        checkNotBooked(assignments.stream().map(assignment -> assignment.getMechanic().getId()).toList(),
+                dto.scheduledDate(), visitId);
 
         serviceVisit.setScheduledDate(dto.scheduledDate());
         ServiceVisit updatedVisit = serviceVisitRepository.save(serviceVisit);
 
-        return serviceVisitMapper.toResponseDto(updatedVisit, visitAssignmentRepository.findByServiceVisitId(visitId));
+        return serviceVisitMapper.toResponseDto(updatedVisit, assignments);
+    }
+
+    // ADMIN only: enforced in SecurityConfig.
+    @Override
+    @Transactional(readOnly = true)
+    public List<AvailableSlotDTO> getAvailableSlots(Long mechanicId, LocalDate date, Long excludeVisitId) {
+
+        getEnabledMechanicOrThrow(mechanicId);
+
+        List<LocalDateTime> slotStarts = new ArrayList<>();
+        for (LocalTime time = booking.getWorkStart(); !time.isAfter(booking.lastStart());
+             time = time.plusMinutes(booking.getSlotMinutes())) {
+            slotStarts.add(date.atTime(time));
+        }
+
+        LocalDateTime now = LocalDateTime.now(clock);
+        boolean workingDay = booking.getWorkingDays().contains(date.getDayOfWeek());
+        boolean anyFutureSlot = !slotStarts.isEmpty() && !slotStarts.getLast().isBefore(now);
+
+        // One query for the whole day: every active visit that overlaps any of the day's slots.
+        List<LocalDateTime> bookedStarts = workingDay && anyFutureSlot
+                ? findActiveVisits(List.of(mechanicId), slotStarts.getFirst(), slotStarts.getLast(), excludeVisitId)
+                        .stream().map(ServiceVisit::getScheduledDate).toList()
+                : List.of();
+
+        return slotStarts.stream()
+                .map(start -> new AvailableSlotDTO(start, workingDay
+                        && !start.isBefore(now)
+                        && bookedStarts.stream().noneMatch(booked -> overlaps(booked, start))))
+                .toList();
     }
 
     // ADMIN only: enforced in SecurityConfig.
@@ -232,6 +279,71 @@ public class ServiceVisitServiceImpl implements ServiceVisitService {
         // Assignment rows reference the visit through a foreign key, so they must be removed first.
         visitAssignmentRepository.deleteAll(visitAssignmentRepository.findByServiceVisitId(visitId));
         serviceVisitRepository.delete(serviceVisit);
+    }
+
+    private AppUser getEnabledMechanicOrThrow(Long mechanicId) {
+        AppUser mechanic = appUserService.getByIdOrThrow(mechanicId);
+
+        if (mechanic.getRole() != Role.MECHANIC) {
+            throw new IllegalArgumentException("User with ID " + mechanicId + " is not a mechanic");
+        }
+
+        if (!mechanic.isEnabled()) {
+            throw new IllegalArgumentException("Mechanic account is disabled");
+        }
+
+        return mechanic;
+    }
+
+    // Working day, within working hours (the whole visit must fit) and on a slot boundary.
+    // "Not in the past" is checked on the request DTOs (@FutureOrPresent).
+    private void validateSlot(LocalDateTime start) {
+        if (!booking.getWorkingDays().contains(start.getDayOfWeek())) {
+            throw new IllegalArgumentException("Scheduled date must be on a working day ("
+                    + booking.getWorkingDays().stream().sorted().map(DayOfWeek::name)
+                            .collect(Collectors.joining(", ")) + ")");
+        }
+
+        LocalTime time = start.toLocalTime();
+        if (time.isBefore(booking.getWorkStart()) || time.isAfter(booking.lastStart())) {
+            throw new IllegalArgumentException("Scheduled time must be between " + booking.getWorkStart()
+                    + " and " + booking.lastStart() + " (working hours " + booking.getWorkStart() + "-"
+                    + booking.getWorkEnd() + ", a visit takes " + booking.getVisitDurationMinutes() + " minutes)");
+        }
+
+        long minutesFromOpening = Duration.between(booking.getWorkStart(), time).toMinutes();
+        if (time.getSecond() != 0 || time.getNano() != 0 || minutesFromOpening % booking.getSlotMinutes() != 0) {
+            throw new IllegalArgumentException("Scheduled time must start on a " + booking.getSlotMinutes()
+                    + "-minute slot (e.g. " + booking.getWorkStart() + ", "
+                    + booking.getWorkStart().plusMinutes(booking.getSlotMinutes()) + ")");
+        }
+    }
+
+    private void checkNotBooked(List<Long> mechanicIds, LocalDateTime start, Long excludeVisitId) {
+        if (!findActiveVisits(mechanicIds, start, start, excludeVisitId).isEmpty()) {
+            throw new BookingConflictException(BOOKING_CONFLICT_MESSAGE);
+        }
+    }
+
+    /**
+     * SCHEDULED / IN_PROGRESS visits of these mechanics that overlap a visit starting anywhere between
+     * {@code firstStart} and {@code lastStart}. All visits have the same length D, so two visits overlap exactly
+     * when their starts are less than D apart: the query range is (firstStart - D, lastStart + D), both exclusive.
+     */
+    private List<ServiceVisit> findActiveVisits(List<Long> mechanicIds, LocalDateTime firstStart,
+                                                LocalDateTime lastStart, Long excludeVisitId) {
+        if (mechanicIds.isEmpty()) {
+            return List.of();
+        }
+        Duration duration = booking.visitDuration();
+        return serviceVisitRepository.findByMechanicsAndStatusStartingBetween(mechanicIds, ACTIVE_STATUSES,
+                        firstStart.minus(duration), lastStart.plus(duration)).stream()
+                .filter(visit -> !Objects.equals(visit.getId(), excludeVisitId))
+                .toList();
+    }
+
+    private boolean overlaps(LocalDateTime startA, LocalDateTime startB) {
+        return Duration.between(startA, startB).abs().compareTo(booking.visitDuration()) < 0;
     }
 
     private ServiceVisit getScheduledVisitOrThrow(Long visitId, String action) {

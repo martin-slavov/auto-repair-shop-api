@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.service;
 
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.invoice.InvoiceDetailDTO;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 
 import java.math.BigDecimal;
@@ -12,7 +13,7 @@ public interface InvoiceService {
 
     InvoiceResponseDTO markAsPaid(Long invoiceId);
 
-    InvoiceResponseDTO getInvoiceById(Long invoiceId, String currentUsername);
+    InvoiceDetailDTO getInvoiceById(Long invoiceId, String currentUsername);
 
     void deleteInvoice(Long invoiceId);
 

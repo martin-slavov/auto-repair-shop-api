@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.controller;
 
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.invoice.InvoiceDetailDTO;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 import com.example.auto_repair_shop_api.service.InvoiceService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
@@ -63,12 +64,13 @@ public class InvoiceController {
     }
 
     @Operation(summary = "Get an invoice by ID",
-            description = "Access: CUSTOMER, ADMIN. Customers can only see invoices for their own vehicles.")
+            description = "Access: CUSTOMER, ADMIN. Customers can only see invoices for their own vehicles. " +
+                    "Includes the part lines (partName, quantity, unitPrice, lineTotal), laborHours and laborRate.")
     @GetMapping("/{id}")
-    public ResponseEntity<InvoiceResponseDTO> getInvoiceById(@PathVariable Long id) {
+    public ResponseEntity<InvoiceDetailDTO> getInvoiceById(@PathVariable Long id) {
 
         String currentUsername = SecurityUtils.getCurrentUsername();
-        InvoiceResponseDTO result = invoiceService.getInvoiceById(id, currentUsername);
+        InvoiceDetailDTO result = invoiceService.getInvoiceById(id, currentUsername);
         return ResponseEntity.ok(result);
     }
 

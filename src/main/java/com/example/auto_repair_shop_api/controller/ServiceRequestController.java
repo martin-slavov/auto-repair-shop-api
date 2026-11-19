@@ -78,7 +78,12 @@ public class ServiceRequestController {
     }
 
     @Operation(summary = "Approve a service request",
-            description = "Access: ADMIN. Only PENDING requests; approving assigns a mechanic.")
+            description = "Access: ADMIN. Only PENDING requests; approving creates a SCHEDULED visit with the " +
+                    "mechanic as LEAD. The mechanic must be an enabled MECHANIC. `scheduledDate` must be now or " +
+                    "later, on a working day (Monday to Friday), between 09:00 and 16:00 and on a 30-minute slot " +
+                    "(400 otherwise). The mechanic must have no SCHEDULED / IN_PROGRESS visit overlapping the " +
+                    "60 minutes from that start (409 \"Mechanic is already booked at this time\"). Use " +
+                    "GET /api/service-visits/available-slots to pick a free slot.")
     @PatchMapping("/{id}/approve")
     public ResponseEntity<ServiceRequestResponseDTO> approveServiceRequest(@PathVariable Long id, @Valid @RequestBody ApproveRequestDTO dto) {
 

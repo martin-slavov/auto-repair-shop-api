@@ -1,6 +1,7 @@
 package com.example.auto_repair_shop_api.service.impl;
 
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
+import com.example.auto_repair_shop_api.dto.invoice.InvoiceDetailDTO;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
@@ -119,7 +120,7 @@ public class InvoiceServiceImpl implements InvoiceService {
 
     @Override
     @Transactional(readOnly = true)
-    public InvoiceResponseDTO getInvoiceById(Long invoiceId, String currentUsername) {
+    public InvoiceDetailDTO getInvoiceById(Long invoiceId, String currentUsername) {
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
         Invoice invoice = getInvoiceOrThrow(invoiceId);
@@ -130,7 +131,9 @@ public class InvoiceServiceImpl implements InvoiceService {
             throw new OwnershipViolationException("You do not have permission to view this invoice");
         }
 
-        return invoiceMapper.toResponseDto(invoice);
+        Long visitId = invoice.getVisit().getId();
+        List<VisitPart> parts = visitPartRepository.findByServiceVisitIdOrderByIdAsc(visitId);
+        return invoiceMapper.toDetailDto(invoice, parts, calculateTotalHours(visitId), HOURLY_RATE);
     }
 
     @Override
@@ -219,13 +222,15 @@ public class InvoiceServiceImpl implements InvoiceService {
     }
 
     private BigDecimal calculateLaborPrice(Long visitId) {
+        return HOURLY_RATE.multiply(calculateTotalHours(visitId)).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal calculateTotalHours(Long visitId) {
         List<VisitAssignment> assignments = visitAssignmentRepository.findByServiceVisitId(visitId);
 
-        BigDecimal totalHours = assignments.stream()
+        return assignments.stream()
                 .map(VisitAssignment::getHoursWorked)
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        return HOURLY_RATE.multiply(totalHours).setScale(2, RoundingMode.HALF_UP);
     }
 }

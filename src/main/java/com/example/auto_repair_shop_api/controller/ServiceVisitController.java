@@ -2,6 +2,7 @@ package com.example.auto_repair_shop_api.controller;
 
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.invoice.InvoiceResponseDTO;
+import com.example.auto_repair_shop_api.dto.servicevisit.AvailableSlotDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.CompleteVisitDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicevisit.ServiceVisitUpdateDTO;
@@ -23,6 +24,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "Service Visits", description = "Service visit workflow: admins reschedule, delete and invoice visits, " +
         "mechanics work on their assigned visits, customers view the visits of their own vehicles")
@@ -103,7 +105,31 @@ public class ServiceVisitController {
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
-    @Operation(summary = "Reschedule a visit", description = "Access: ADMIN. Only SCHEDULED visits.")
+    @Operation(summary = "Free slots of a mechanic on a day",
+            description = "Access: ADMIN. Returns every slot start of the day (09:00 to 16:00 every 30 minutes, " +
+                    "server local time) with `available`. A slot is unavailable if it is in the past, the day is " +
+                    "not a working day (Monday to Friday), or the mechanic has a SCHEDULED / IN_PROGRESS visit " +
+                    "overlapping it (every visit takes 60 minutes). Pass `excludeVisitId` when rescheduling so the " +
+                    "visit's own time counts as free. 404 if the user does not exist, 400 if it is not an " +
+                    "enabled mechanic.")
+    @GetMapping("/available-slots")
+    public ResponseEntity<List<AvailableSlotDTO>> getAvailableSlots(
+            @Parameter(description = "Mechanic (user) ID", required = true)
+            @RequestParam Long mechanicId,
+            @Parameter(description = "Day (yyyy-MM-dd)", required = true)
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @Parameter(description = "Visit to ignore (the one being rescheduled)")
+            @RequestParam(required = false) Long excludeVisitId) {
+
+        List<AvailableSlotDTO> result = serviceVisitService.getAvailableSlots(mechanicId, date, excludeVisitId);
+        return ResponseEntity.ok().body(result);
+    }
+
+    @Operation(summary = "Reschedule a visit",
+            description = "Access: ADMIN. Only SCHEDULED visits. The new start must be now or later, on a working " +
+                    "day (Monday to Friday), between 09:00 and 16:00 and on a 30-minute slot (400 otherwise). " +
+                    "Every mechanic assigned to the visit must be free for 60 minutes from the new start, " +
+                    "ignoring this visit itself (409 \"Mechanic is already booked at this time\").")
     @PutMapping("/{id}")
     public ResponseEntity<ServiceVisitResponseDTO> updateVisit(@PathVariable Long id, @Valid @RequestBody ServiceVisitUpdateDTO dto) {
 

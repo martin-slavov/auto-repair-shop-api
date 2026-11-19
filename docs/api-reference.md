@@ -165,6 +165,7 @@ Every error produced by the application has this shape:
 | `400` | Bad `sort` value | `"Unknown sort field 'price'. Allowed: ..."` |
 | `400` | Range filter inverted | `"yearFrom must not be greater than yearTo"`, `"issuedFrom must not be after issuedTo"` |
 | `400` | Action not allowed in the current status | `"Only pending requests can be approved"`, `"Invalid status transition"`, `"Visit status must be COMPLETED"` |
+| `400` | Booking rule (approve / reschedule, see 4.5.1) | `"Scheduled date must be on a working day (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)"`, `"Scheduled time must be between 09:00 and 16:00 (working hours 09:00-17:00, a visit takes 60 minutes)"`, `"Scheduled time must start on a 30-minute slot (e.g. 09:00, 09:30)"` |
 | `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Mechanic account is disabled"`, `"Current password is incorrect"`, `"You cannot disable your own account"` |
 | `401` | Not logged in, token expired/invalid, account disabled | `"Authentication is required"` |
 | `401` | Login failed | `"Invalid username or password"` |
@@ -174,6 +175,7 @@ Every error produced by the application has this shape:
 | `403` | Unknown URL, or a real path called with a method that has no rule (logged-in user) | `"You don't have permission to access this resource"` |
 | `409` | Duplicate unique value | `"Username is already taken"`, `"Vehicle with this license plate already exists"`, `"Part with this serial number already exists"`, `"Catalog item with this name already exists"` |
 | `409` | Resource still in use | `"Vehicle cannot be deleted because it has service requests or visits"`, `"Cannot disable the last enabled admin"` |
+| `409` | Mechanic already booked (approve / reschedule) | `"Mechanic is already booked at this time"` |
 | `409` | Database constraint | `"The data conflicts with existing data"` |
 
 Also possible: `415 "Unsupported Media Type"` (body not JSON) and `500 "Unexpected error"`. `404 "Not Found"`
@@ -364,6 +366,9 @@ Request body field rules are in section 5.
 | `PartCatalogDTO` (mechanic) | `id`, `name`, `serialNumber`, `unitSellPrice`, `active` |
 | `CatalogItemResponseDTO` | `id`, `name`, `description`, `basePrice`, `active`, `createdAt`, `estimatedHours` |
 | `InvoiceResponseDTO` | `id`, `invoiceNumber`, `licensePlate`, `partsPrice`, `laborPrice`, `totalPrice`, `issuedDate`, `paid` |
+| `InvoiceDetailDTO` (single invoice) | all `InvoiceResponseDTO` fields, plus `laborHours` (total `hoursWorked` of all assignments), `laborRate` (hourly rate, `30.00`), `partLines[]` |
+| `AvailableSlotDTO` (array from `available-slots`) | `start` (`"yyyy-MM-ddTHH:mm:ss"`, server local time), `available` (boolean) |
+| `InvoicePartLineDTO` (in `partLines[]`) | `partName`, `quantity`, `unitPrice` (= `lineTotal` ÷ `quantity`, 2 decimals), `lineTotal` (= the part line's `priceAtTimeOfUse`) |
 
 Responses contain no ids for the linked vehicle, request or visit (only `licensePlate`), except
 `VehicleResponseDTO.ownerId`.
@@ -405,7 +410,7 @@ Admins cannot create vehicles (POST is CUSTOMER only).
 | POST | `/api/service-requests` | CUSTOMER (own vehicle) | `ServiceRequestCreateDTO` | 201 | `ServiceRequestResponseDTO` (status `PENDING`) |
 | PUT | `/api/service-requests/{id}` | CUSTOMER (own), ADMIN | `ServiceRequestUpdateDTO` | 200 | `ServiceRequestResponseDTO` (PENDING only) |
 | DELETE | `/api/service-requests/{id}` | CUSTOMER (own), ADMIN | — | 204 | — (PENDING only) |
-| PATCH | `/api/service-requests/{id}/approve` | ADMIN | `ApproveRequestDTO` | 200 | `ServiceRequestResponseDTO` (status `APPROVED`) |
+| PATCH | `/api/service-requests/{id}/approve` | ADMIN | `ApproveRequestDTO` | 200 | `ServiceRequestResponseDTO` (status `APPROVED`; booking rules in 4.5.1, 409 if the mechanic is booked) |
 | PATCH | `/api/service-requests/{id}/reject` | ADMIN | — | 200 | `ServiceRequestResponseDTO` (status `REJECTED`) |
 
 After a request is created, an email notification goes to the shop asynchronously. This does not affect the response.
@@ -417,12 +422,67 @@ After a request is created, an email notification goes to the shop asynchronousl
 | GET | `/api/service-visits` | ADMIN, MECHANIC, CUSTOMER | — | 200 | `PageResponse<ServiceVisitResponseDTO>` |
 | PATCH | `/api/service-visits/{id}/status` | MECHANIC (assigned) | `UpdateVisitStatusDTO` | 200 | `ServiceVisitResponseDTO` |
 | PATCH | `/api/service-visits/{id}/complete` | MECHANIC (lead) | `CompleteVisitDTO` | 200 | `ServiceVisitResponseDTO` |
-| PUT | `/api/service-visits/{id}` | ADMIN | `ServiceVisitUpdateDTO` | 200 | `ServiceVisitResponseDTO` (SCHEDULED only) |
+| GET | `/api/service-visits/available-slots` | ADMIN | — | 200 | `AvailableSlotDTO[]` (plain array, see 4.5.2) |
+| PUT | `/api/service-visits/{id}` | ADMIN | `ServiceVisitUpdateDTO` | 200 | `ServiceVisitResponseDTO` (SCHEDULED only; booking rules in 4.5.1, 409 if a mechanic is booked) |
 | DELETE | `/api/service-visits/{id}` | ADMIN | — | 204 | — (SCHEDULED, no parts; request → PENDING) |
 | PATCH | `/api/service-visits/{id}/invoice` | ADMIN | — | 201 | `InvoiceResponseDTO` (visit must be COMPLETED; visit → INVOICED) |
 
 Visits are created only by approving a request. In the `PATCH .../status` and `PATCH .../complete` responses,
 `mechanics[]` contains **only the calling mechanic's** assignment. The list and `PUT` responses contain all assignments.
+
+#### 4.5.1 Booking rules (approve and reschedule)
+
+Checked whenever a `scheduledDate` is set: `PATCH /api/service-requests/{id}/approve` and `PUT /api/service-visits/{id}`.
+All times are the server's local time. The values are defaults in code (`BookingProperties`) and can be
+overridden with `app.booking.*` properties.
+
+| Rule | Default | Error |
+|------|---------|-------|
+| Not in the past | now or later | `400` `"Validation failed"`, `fieldErrors.scheduledDate: "Scheduled date cannot be in the past"` |
+| Working day | Monday to Friday | `400` `"Scheduled date must be on a working day (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)"` |
+| Working hours | 09:00–17:00; every visit takes **60 minutes**, so the start must be 09:00–16:00 | `400` `"Scheduled time must be between 09:00 and 16:00 (working hours 09:00-17:00, a visit takes 60 minutes)"` |
+| Slot | start on a 30-minute slot (`:00` or `:30`, seconds `0`) | `400` `"Scheduled time must start on a 30-minute slot (e.g. 09:00, 09:30)"` |
+| No double booking | see below | `409` `"Mechanic is already booked at this time"` |
+
+- Order of checks: body validation (incl. "not in the past"), request/visit status, mechanic (approve only:
+  404 / 400), working day, working hours, slot, double booking.
+- **Double booking**: a mechanic (any assignment, `LEAD` or `ASSISTANT`) cannot have two `SCHEDULED` or
+  `IN_PROGRESS` visits whose ranges `[start, start + 60 min)` intersect. Back-to-back visits (10:00 and 11:00)
+  are fine. `COMPLETED` and `INVOICED` visits never block.
+- On reschedule **every** mechanic assigned to the visit must be free, and the visit being rescheduled is
+  ignored, so moving it by 30 minutes into time it partly occupies already is allowed.
+
+#### 4.5.2 `GET /api/service-visits/available-slots` — ADMIN
+
+| Param | Type | Required | Notes |
+|-------|------|----------|-------|
+| `mechanicId` | long | yes | unknown → `404 "User not found with id: x"`; not a mechanic → `400 "User with ID x is not a mechanic"`; disabled → `400 "Mechanic account is disabled"` |
+| `date` | date (`yyyy-MM-dd`) | yes | wrong format → `400 "Invalid value for parameter 'date'"` |
+| `excludeVisitId` | long | no | a visit to ignore, normally the one being rescheduled, so its own time shows as free |
+
+Missing `mechanicId` or `date` → `400 "Bad Request"`.
+
+Returns **all** slot starts of the day in order (with the defaults 15 slots: 09:00, 09:30, …, 16:00), each with
+`available`. A slot is `false` if it starts before now, if the day is not a working day (then all are `false`),
+or if the mechanic has a `SCHEDULED` / `IN_PROGRESS` visit overlapping the 60 minutes from that start. Example
+for a mechanic with a visit at 11:00 (10:30, 11:00 and 11:30 are blocked):
+
+```json
+[
+  { "start": "2026-11-23T09:00:00", "available": true },
+  { "start": "2026-11-23T09:30:00", "available": true },
+  { "start": "2026-11-23T10:00:00", "available": true },
+  { "start": "2026-11-23T10:30:00", "available": false },
+  { "start": "2026-11-23T11:00:00", "available": false },
+  { "start": "2026-11-23T11:30:00", "available": false },
+  { "start": "2026-11-23T12:00:00", "available": true },
+  ...
+  { "start": "2026-11-23T16:00:00", "available": true }
+]
+```
+
+A slot shown as available can still be taken before you approve or reschedule, so always handle the `409`.
+The endpoint covers one mechanic; for a visit that also has an assistant, the reschedule checks all of them.
 
 ### 4.6 Visit parts
 
@@ -437,7 +497,8 @@ Visits are created only by approving a request. In the `PATCH .../status` and `P
   taken from the part's `unitSellPrice` at that moment.
 - PUT/DELETE: not allowed once the visit is `COMPLETED` or `INVOICED`. A PUT keeps the original unit price.
   `partLineId` is the `id` from `VisitPartResponseDTO`.
-- Customers cannot see part lines. They see only the invoice totals.
+- Customers cannot call this endpoint. They see the part lines of an invoiced visit only through
+  `GET /api/invoices/{id}` (`partLines`).
 
 ### 4.7 Parts
 
@@ -453,13 +514,22 @@ Visits are created only by approving a request. In the `PATCH .../status` and `P
 | Method | Path | Roles | Body | Success | Response |
 |--------|------|-------|------|---------|----------|
 | GET | `/api/invoices` | CUSTOMER, ADMIN | — | 200 | `PageResponse<InvoiceResponseDTO>` |
-| GET | `/api/invoices/{id}` | CUSTOMER (own vehicle), ADMIN | — | 200 | `InvoiceResponseDTO` |
+| GET | `/api/invoices/{id}` | CUSTOMER (own vehicle), ADMIN | — | 200 | `InvoiceDetailDTO` (with `partLines`, `laborHours`, `laborRate`) |
 | PATCH | `/api/invoices/{id}/pay` | ADMIN | — | 200 | `InvoiceResponseDTO` (`paid: true`; already paid → 400) |
 | DELETE | `/api/invoices/{id}` | ADMIN | — | 204 | — (unpaid only; visit → COMPLETED) |
 
 Invoices are created via `PATCH /api/service-visits/{id}/invoice`. Calculation: `partsPrice` = sum of the
 visit's part-line totals; `laborPrice` = 30.00 × total `hoursWorked` of all assignments; `totalPrice` = both
 added. `invoiceNumber` = `INV-<current year>-<visit id, 5 digits>`, e.g. `INV-2026-00012`.
+
+Only the single invoice (`GET /api/invoices/{id}`) has the line items; the list and the other invoice
+responses keep `InvoiceResponseDTO`.
+- `partLines`: one entry per part line of the visit, in the order they were added; an empty array when the
+  visit used no parts. The sum of `lineTotal` equals `partsPrice`.
+- `laborHours` × `laborRate` equals `laborPrice`.
+- The lines are read from the visit, which cannot change after it is `COMPLETED`. `laborRate` is the current
+  hourly rate, not a value stored on the invoice.
+- Same access as before: a customer gets `403` for another customer's invoice.
 
 ### 4.9 Admin users
 
@@ -551,13 +621,13 @@ The vehicle of a request cannot be changed.
 | Field | Type | Required | Other |
 |-------|------|----------|-------|
 | `mechanicId` | long | yes | must be an **enabled** user with role MECHANIC: otherwise 400 `"User with ID x is not a mechanic"` or 400 `"Mechanic account is disabled"`; unknown id → 404 |
-| `scheduledDate` | datetime | yes | now or later (`"Scheduled date cannot be in the past"`) |
+| `scheduledDate` | datetime | yes | now or later (`"Scheduled date cannot be in the past"`); working day, 09:00–16:00, 30-minute slot (400); mechanic free for 60 minutes (409). See 4.5.1 |
 
 ### 5.9 ServiceVisitUpdateDTO
 
 | Field | Type | Required | Other |
 |-------|------|----------|-------|
-| `scheduledDate` | datetime | yes | now or later |
+| `scheduledDate` | datetime | yes | now or later; working day, 09:00–16:00, 30-minute slot (400); every assigned mechanic free for 60 minutes, ignoring this visit (409). See 4.5.1 |
 
 ### 5.10 UpdateVisitStatusDTO
 
@@ -665,6 +735,8 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
 - **`GET /api/parts`**: ADMIN and MECHANIC get different shapes (`PartView`): `PartResponseDTO` with `unitCost`
   vs `PartCatalogDTO` without it. Sorting by `unitCost` is admin only (mechanic → 400). Mechanics only see
   active parts.
+- **`GET /api/invoices/{id}`** returns `InvoiceDetailDTO` with the part lines and labour hours/rate, for an
+  itemised printout. `GET /api/invoices` (the list) does not include them.
 - **`GET /api/catalog-items`**: public. With an ADMIN token, inactive items appear and the `active` filter
   works. An invalid or expired token here is ignored (you get the guest view, not a 401).
 - **Passwords**: minimum 8 characters (`password`, `newPassword`), maximum **72 bytes in UTF-8**.
@@ -693,6 +765,9 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
   | `GET /api/parts/{id}` | 401 | 403 |
   | `GET /api/service-visits/{id}` | 401 | 403 for ADMIN/CUSTOMER; **405** for MECHANIC (the `/api/service-visits/**` MECHANIC rule matches, and PUT/DELETE exist on that path) |
   | `GET /api/admin/users/{id}` | 401 | 403 for non-admins; **404** for ADMIN (the `/api/admin/**` rule matches, nothing is mapped there) |
+- **Scheduling**: before approving or rescheduling, load `GET /api/service-visits/available-slots` for the
+  chosen mechanic and day (with `excludeVisitId` when rescheduling) and offer only `available: true` starts.
+  Send the slot's `start` unchanged as `scheduledDate`. See 4.5.1.
 - **Approve response**: `/approve` returns the request, not the new visit. Reload the visit list to get it.
   Responses do not include the ids of linked records (only `licensePlate`).
 - **Service request update** replaces `preferredDate`. Always send the current value, or it is cleared.

@@ -6,6 +6,8 @@ import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.user.ChangePasswordDTO;
 import com.example.auto_repair_shop_api.dto.user.UpdateUserEnabledDTO;
 import com.example.auto_repair_shop_api.dto.user.UserAdminDTO;
+import com.example.auto_repair_shop_api.dto.user.UserProfileDTO;
+import com.example.auto_repair_shop_api.dto.user.UserProfileUpdateDTO;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -28,4 +30,12 @@ public interface AppUserService extends UserDetailsService {
     UserAdminDTO updateEnabled(Long id, UpdateUserEnabledDTO dto, String currentUsername);
 
     void changePassword(String currentUsername, ChangePasswordDTO dto);
+
+    UserProfileDTO getProfile(String currentUsername);
+
+    UserProfileDTO updateProfile(String currentUsername, UserProfileUpdateDTO dto);
+
+    UserAdminDTO updateUser(Long id, UserProfileUpdateDTO dto);
+
+    void deleteUser(Long id, String currentUsername);
 }

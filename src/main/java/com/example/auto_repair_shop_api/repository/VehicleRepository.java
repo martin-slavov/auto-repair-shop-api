@@ -18,6 +18,8 @@ public interface VehicleRepository extends JpaRepository<Vehicle, Long>, JpaSpec
 
     List<Vehicle> findByOwnerId(Long ownerId);
 
+    boolean existsByOwnerId(Long ownerId);
+
     boolean existsByLicensePlate(String licensePlate);
 
     boolean existsByLicensePlateAndIdNot(String licensePlate, Long id);

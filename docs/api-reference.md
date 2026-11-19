@@ -120,6 +120,25 @@ Response `204 No Content`. Errors: `400 "Current password is incorrect"`,
 `400 "New password must be different from the current password"`, `400` validation (see 5.3).
 Tokens issued before the change **stay valid** until they expire.
 
+### 1.7 Own profile — `GET /api/users/me`, `PUT /api/users/me` (any logged-in user)
+
+`GET` returns the caller's `UserProfileDTO`:
+
+```json
+{ "id": 4, "username": "john", "email": "john@example.com", "firstName": "John", "lastName": "Doe",
+  "role": "CUSTOMER", "enabled": true }
+```
+
+`PUT` replaces the editable fields (all required, see 5.17) and returns the updated `UserProfileDTO`:
+
+```json
+{ "email": "john.doe@example.com", "firstName": "Johnny", "lastName": "Doe" }
+```
+
+`username` and `role` are **never** changed (any such fields in the body are ignored), so the current token
+stays valid after an update. Keeping your own email is allowed. Errors: `400` validation (see 5.17);
+`409 "Email is already in use"` if another user has that email.
+
 ---
 
 ## 2. Errors
@@ -167,15 +186,15 @@ Every error produced by the application has this shape:
 | `400` | Action not allowed in the current status | `"Only pending requests can be approved"`, `"Invalid status transition"`, `"Visit status must be COMPLETED"` |
 | `400` | Booking rule (approve / reschedule, see 4.5.1) | `"Scheduled date must be on a working day (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)"`, `"Scheduled time must be between 09:00 and 16:00 (working hours 09:00-17:00, a visit takes 60 minutes)"`, `"Scheduled time must start on a 30-minute slot (e.g. 09:00, 09:30)"` |
 | `400` | Assistants (4.5.3, 5.11) | `"A visit can have at most 3 assistants"`, `"The lead mechanic cannot be removed"`, `"Assistants can only be changed on scheduled or in-progress visits"`, `"Hours are required for every assistant (missing assignment ids: 31)"`, `"Unknown assistant assignment: 30"` |
-| `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Mechanic account is disabled"`, `"Current password is incorrect"`, `"You cannot disable your own account"` |
+| `400` | Other business rule | `"Part is not active"`, `"User with ID 5 is not a mechanic"`, `"Mechanic account is disabled"`, `"Current password is incorrect"`, `"You cannot disable your own account"`, `"You cannot delete your own account"` |
 | `401` | Not logged in, token expired/invalid, account disabled | `"Authentication is required"` |
 | `401` | Login failed | `"Invalid username or password"` |
 | `403` | Role not allowed for this endpoint | `"You don't have permission to access this resource"` |
 | `403` | Right role, but not your resource (ownership / assignment) | `"You do not have permission to view this vehicle"`, `"You can only modify service requests for your own vehicles"`, `"Mechanic is not assigned to this service visit"` |
 | `404` | ID does not exist (or a non-admin asks for an inactive catalog item) | `"Vehicle not found"`, `"Service request not found with ID: 12"` |
 | `403` | Unknown URL, or a real path called with a method that has no rule (logged-in user) | `"You don't have permission to access this resource"` |
-| `409` | Duplicate unique value | `"Username is already taken"`, `"Vehicle with this license plate already exists"`, `"Part with this serial number already exists"`, `"Catalog item with this name already exists"` |
-| `409` | Resource still in use | `"Vehicle cannot be deleted because it has service requests or visits"`, `"Cannot disable the last enabled admin"` |
+| `409` | Duplicate unique value | `"Username is already taken"`, `"Email is already in use"`, `"Vehicle with this license plate already exists"`, `"Part with this serial number already exists"`, `"Catalog item with this name already exists"` |
+| `409` | Resource still in use | `"Vehicle cannot be deleted because it has service requests or visits"`, `"Cannot disable the last enabled admin"`, `"User cannot be deleted because they have related data (...). Disable the user instead."` |
 | `409` | Mechanic already booked (approve / reschedule / add assistant) | `"Mechanic is already booked at this time"` |
 | `409` | Mechanic already on the visit (add assistant) | `"Mechanic is already assigned to this visit"` |
 | `409` | Database constraint | `"The data conflicts with existing data"` |
@@ -359,6 +378,7 @@ Request body field rules are in section 5.
 |--------|--------|
 | `RegisterResponseDTO` | `id`, `username`, `email`, `role` |
 | `UserAdminDTO` | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
+| `UserProfileDTO` (own profile) | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
 | `VehicleResponseDTO` | `id`, `licensePlate`, `manufacturer`, `model`, `year`, `ownerId`, `ownerName` ("First Last"), `firstRegistrationDate` (nullable) |
 | `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable) |
 | `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]`, `requestType` (`SERVICE` / `INSPECTION` / `CONSULTATION`), `requestDescription` (the work to do), `vehicleManufacturer`, `vehicleModel`, `myRole` (the calling mechanic's role in the visit, `LEAD` / `ASSISTANT`; `null` for ADMIN and CUSTOMER). `requestType` and `requestDescription` come from the service request the visit was created from and are `null` if the visit has no linked request |
@@ -608,14 +628,33 @@ responses keep `InvoiceResponseDTO`.
 | POST | `/api/admin/users/mechanic` | ADMIN | `RegisterRequestDTO` | 201 | `RegisterResponseDTO` (role `MECHANIC`) |
 | POST | `/api/admin/users/admin` | ADMIN | `RegisterRequestDTO` | 201 | `RegisterResponseDTO` (role `ADMIN`) |
 | PATCH | `/api/admin/users/{id}/enabled` | ADMIN | `UpdateUserEnabledDTO` | 200 | `UserAdminDTO` |
+| PUT | `/api/admin/users/{id}` | ADMIN | `UserProfileUpdateDTO` | 200 | `UserAdminDTO` |
+| DELETE | `/api/admin/users/{id}` | ADMIN | — | 204 | — |
 
 Enable/disable: sending the current value changes nothing and returns the user. You cannot disable yourself
 (`400`) or the last enabled admin (`409`). A disabled user is locked out on their next request (see 1.5).
 
-### 4.10 Own password
+Update: same rules as `PUT /api/users/me` (1.7). Only `email`, `firstName` and `lastName` change; `username`
+and `role` never do. Errors: `400` validation (see 5.17), `404 "User not found with id: 5"`,
+`409 "Email is already in use"`.
+
+Delete:
+
+| Rule | Error |
+|------|-------|
+| user exists | `404` `"User not found with id: 5"` |
+| not your own account | `400` `"You cannot delete your own account"` |
+| no related data: owns no vehicles (so no service requests, visits or invoices) and has no mechanic assignments | `409` `"User cannot be deleted because they have related data (vehicles, service requests, visits, invoices or mechanic assignments). Disable the user instead."` |
+
+A user with history cannot be deleted; use `PATCH /api/admin/users/{id}/enabled` with `{"enabled": false}`
+instead. The last admin can never be deleted, because you cannot delete yourself.
+
+### 4.10 Own account
 
 | Method | Path | Roles | Body | Success | Response |
 |--------|------|-------|------|---------|----------|
+| GET | `/api/users/me` | any authenticated | — | 200 | `UserProfileDTO` |
+| PUT | `/api/users/me` | any authenticated | `UserProfileUpdateDTO` | 200 | `UserProfileDTO` |
 | PATCH | `/api/users/me/password` | any authenticated | `ChangePasswordDTO` | 204 | — |
 
 ---
@@ -787,6 +826,16 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
 | `estimatedHours` | decimal | yes | — | > 0; `@Digits(3, 2)` |
 | `active` | boolean | update only, required | — | new items are always active |
 
+### 5.17 UserProfileUpdateDTO (`PUT /api/users/me`, `PUT /api/admin/users/{id}`)
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `email` | string | yes | max 254 | valid email; unique among other users (409) |
+| `firstName` | string | yes | max 50 | |
+| `lastName` | string | yes | max 50 | |
+
+There is no `username` or `role` field; both are fixed at creation.
+
 ---
 
 ## 6. Status workflows
@@ -853,7 +902,7 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
 - **Tokens**: a token issued before a password change **stays valid** until it expires. Disabling an account
   takes effect on the **next request** (the server loads role and `enabled` from the database every time). The
   same would apply to a role changed directly in the database.
-- **Endpoints that do NOT exist yet** (may be needed): `GET /api/users/me`, `GET /api/service-requests/{id}`,
+- **Endpoints that do NOT exist yet** (may be needed): `GET /api/service-requests/{id}`,
   `GET /api/service-visits/{id}`, `GET /api/parts/{id}`, `GET /api/admin/users/{id}`. Until they exist, read
   these from the list endpoints. What a call returns today follows from `SecurityConfig`, which ends with
   `.anyRequest().denyAll()` (default deny):
@@ -862,11 +911,10 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
 
   | Call | Guest | Logged in |
   |------|-------|-----------|
-  | `GET /api/users/me` | 401 | 403 |
   | `GET /api/service-requests/{id}` | 401 | 403 |
   | `GET /api/parts/{id}` | 401 | 403 |
   | `GET /api/service-visits/{id}` | 401 | 403 for ADMIN/CUSTOMER; **405** for MECHANIC (the `/api/service-visits/**` MECHANIC rule matches, and PUT/DELETE exist on that path) |
-  | `GET /api/admin/users/{id}` | 401 | 403 for non-admins; **404** for ADMIN (the `/api/admin/**` rule matches, nothing is mapped there) |
+  | `GET /api/admin/users/{id}` | 401 | 403 for non-admins; **405** for ADMIN (the `/api/admin/**` rule matches, and PUT/DELETE exist on that path) |
 - **Scheduling**: before approving or rescheduling, load `GET /api/service-visits/available-slots` for the
   chosen mechanic and day (with `excludeVisitId` when rescheduling) and offer only `available: true` starts.
   When rescheduling, take the mechanic from the visit's `mechanics[].mechanicId` (admin responses only).

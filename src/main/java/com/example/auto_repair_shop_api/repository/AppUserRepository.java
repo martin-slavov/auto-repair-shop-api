@@ -17,5 +17,7 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long>, JpaSpec
 
     boolean existsByEmail(String email);
 
+    boolean existsByEmailAndIdNot(String email, Long id);
+
     long countByRoleAndEnabledTrue(Role role);
 }

@@ -12,6 +12,8 @@ public interface VisitAssignmentRepository extends JpaRepository<VisitAssignment
 
     List<VisitAssignment> findByMechanicId(Long id);
 
+    boolean existsByMechanicId(Long mechanicId);
+
     Optional<VisitAssignment> findByServiceVisitIdAndMechanicId(Long serviceVisitId, Long mechanicId);
 
     List<VisitAssignment> findByServiceVisitId(Long serviceVisitId);

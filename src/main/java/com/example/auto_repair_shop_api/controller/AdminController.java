@@ -5,6 +5,7 @@ import com.example.auto_repair_shop_api.dto.auth.RegisterResponseDTO;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.user.UpdateUserEnabledDTO;
 import com.example.auto_repair_shop_api.dto.user.UserAdminDTO;
+import com.example.auto_repair_shop_api.dto.user.UserProfileUpdateDTO;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.util.SecurityUtils;
@@ -17,10 +18,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -93,5 +96,27 @@ public class AdminController {
         UserAdminDTO response = appUserService.updateEnabled(id, dto, currentUsername);
 
         return ResponseEntity.ok().body(response);
+    }
+
+    @Operation(summary = "Update a user's profile",
+            description = "Access: ADMIN. Updates email, first name and last name. Username and role never change.")
+    @PutMapping("/users/{id}")
+    public ResponseEntity<UserAdminDTO> updateUser(@PathVariable Long id,
+                                                   @Valid @RequestBody UserProfileUpdateDTO dto) {
+
+        return ResponseEntity.ok(appUserService.updateUser(id, dto));
+    }
+
+    @Operation(summary = "Delete a user",
+            description = "Access: ADMIN. You cannot delete yourself. A user with vehicles, service requests, " +
+                    "visits, invoices or mechanic assignments cannot be deleted (409); disable them instead.")
+    @ApiResponse(responseCode = "204", description = "User deleted")
+    @DeleteMapping("/users/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+
+        String currentUsername = SecurityUtils.getCurrentUsername();
+        appUserService.deleteUser(id, currentUsername);
+
+        return ResponseEntity.noContent().build();
     }
 }

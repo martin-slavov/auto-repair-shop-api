@@ -6,6 +6,8 @@ import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.dto.user.ChangePasswordDTO;
 import com.example.auto_repair_shop_api.dto.user.UpdateUserEnabledDTO;
 import com.example.auto_repair_shop_api.dto.user.UserAdminDTO;
+import com.example.auto_repair_shop_api.dto.user.UserProfileDTO;
+import com.example.auto_repair_shop_api.dto.user.UserProfileUpdateDTO;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
@@ -14,6 +16,8 @@ import com.example.auto_repair_shop_api.mapper.AppUserMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.repository.AppUserRepository;
+import com.example.auto_repair_shop_api.repository.VehicleRepository;
+import com.example.auto_repair_shop_api.repository.VisitAssignmentRepository;
 import com.example.auto_repair_shop_api.service.AppUserService;
 import com.example.auto_repair_shop_api.util.PageRequestFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,12 +58,17 @@ public class AppUserServiceImpl implements AppUserService {
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final AppUserMapper appUserMapper;
+    private final VehicleRepository vehicleRepository;
+    private final VisitAssignmentRepository visitAssignmentRepository;
 
     @Autowired
-    public AppUserServiceImpl(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder, AppUserMapper appUserMapper) {
+    public AppUserServiceImpl(AppUserRepository appUserRepository, PasswordEncoder passwordEncoder, AppUserMapper appUserMapper,
+                              VehicleRepository vehicleRepository, VisitAssignmentRepository visitAssignmentRepository) {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
         this.appUserMapper = appUserMapper;
+        this.vehicleRepository = vehicleRepository;
+        this.visitAssignmentRepository = visitAssignmentRepository;
     }
 
     @Override
@@ -165,6 +174,54 @@ public class AppUserServiceImpl implements AppUserService {
         }
 
         appUser.setPasswordHash(passwordEncoder.encode(dto.newPassword()));
+    }
+
+    @Override
+    public UserProfileDTO getProfile(String currentUsername) {
+        return appUserMapper.toProfileDto(getByUsernameOrThrow(currentUsername));
+    }
+
+    @Override
+    @Transactional
+    public UserProfileDTO updateProfile(String currentUsername, UserProfileUpdateDTO dto) {
+        AppUser appUser = getByUsernameOrThrow(currentUsername);
+        applyProfileUpdate(appUser, dto);
+        return appUserMapper.toProfileDto(appUser);
+    }
+
+    @Override
+    @Transactional
+    public UserAdminDTO updateUser(Long id, UserProfileUpdateDTO dto) {
+        AppUser appUser = getByIdOrThrow(id);
+        applyProfileUpdate(appUser, dto);
+        return appUserMapper.toAdminDto(appUser);
+    }
+
+    @Override
+    @Transactional
+    public void deleteUser(Long id, String currentUsername) {
+        AppUser target = getByIdOrThrow(id);
+
+        if (isSameUser(target, currentUsername)) {
+            throw new InvalidStateTransitionException("You cannot delete your own account");
+        }
+        if (vehicleRepository.existsByOwnerId(id) || visitAssignmentRepository.existsByMechanicId(id)) {
+            throw new ResourceInUseException("User cannot be deleted because they have related data " +
+                    "(vehicles, service requests, visits, invoices or mechanic assignments). " +
+                    "Disable the user instead.");
+        }
+
+        appUserRepository.delete(target);
+    }
+
+    private void applyProfileUpdate(AppUser appUser, UserProfileUpdateDTO dto) {
+        if (appUserRepository.existsByEmailAndIdNot(dto.email(), appUser.getId())) {
+            throw new DuplicateResourceException("Email is already in use");
+        }
+
+        appUser.setEmail(dto.email());
+        appUser.setFirstName(dto.firstName());
+        appUser.setLastName(dto.lastName());
     }
 
     private boolean isSameUser(AppUser target, String currentUsername) {

@@ -129,6 +129,7 @@ public class SecurityConfig {
                                 .requestMatchers(HttpMethod.PATCH, "/api/users/me/password").authenticated()
                                 .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
                                 .requestMatchers(HttpMethod.PUT, "/api/users/me").authenticated()
+                                .requestMatchers(HttpMethod.POST, "/api/chat").permitAll()
                                 .anyRequest().denyAll()
                 );
         return http.build();

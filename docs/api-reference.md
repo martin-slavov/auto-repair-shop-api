@@ -198,6 +198,8 @@ Every error produced by the application has this shape:
 | `409` | Mechanic already booked (approve / reschedule / add assistant) | `"Mechanic is already booked at this time"` |
 | `409` | Mechanic already on the visit (add assistant) | `"Mechanic is already assigned to this visit"` |
 | `409` | Database constraint | `"The data conflicts with existing data"` |
+| `429` | Chat rate limit (4.11), with a `Retry-After` header in seconds | `"Too many chat requests. Please try again in a minute."`, `"The assistant has reached its daily limit. Please try again tomorrow."` |
+| `503` | Chat assistant unavailable (4.11) | `"The assistant is temporarily unavailable. Please try again later."` |
 
 Also possible: `415 "Unsupported Media Type"` (body not JSON) and `500 "Unexpected error"`. `404 "Not Found"`
 and `405 "Method Not Allowed"` are rare. They occur only under the broad rules that cover a whole path prefix
@@ -390,6 +392,7 @@ Request body field rules are in section 5.
 | `InvoiceResponseDTO` | `id`, `invoiceNumber`, `licensePlate`, `partsPrice`, `laborPrice`, `totalPrice`, `issuedDate`, `paid` |
 | `InvoiceDetailDTO` (single invoice) | all `InvoiceResponseDTO` fields, plus `laborHours` (total `hoursWorked` of all assignments), `laborRate` (hourly rate, `30.00`), `partLines[]` |
 | `AvailableSlotDTO` (array from `available-slots`) | `start` (`"yyyy-MM-ddTHH:mm:ss"`, server local time), `available` (boolean) |
+| `ChatResponseDTO` | `reply` (plain text) |
 | `InvoicePartLineDTO` (in `partLines[]`) | `partName`, `quantity`, `unitPrice` (= `lineTotal` ÷ `quantity`, 2 decimals), `lineTotal` (= the part line's `priceAtTimeOfUse`) |
 
 Responses contain no ids for the linked vehicle, request or visit (only `licensePlate`), except
@@ -657,6 +660,54 @@ instead. The last admin can never be deleted, because you cannot delete yourself
 | PUT | `/api/users/me` | any authenticated | `UserProfileUpdateDTO` | 200 | `UserProfileDTO` |
 | PATCH | `/api/users/me/password` | any authenticated | `ChangePasswordDTO` | 204 | — |
 
+### 4.11 Chat assistant — `POST /api/chat` (public)
+
+| Method | Path | Roles | Body | Success | Response |
+|--------|------|-------|------|---------|----------|
+| POST | `/api/chat` | public (guests too) | `ChatRequestDTO` | 200 | `{ "reply": "..." }` |
+
+A chatbot backed by Cloudflare Workers AI (default model `@cf/meta/llama-3.3-70b-instruct-fp8-fast`,
+configurable). The frontend keeps the conversation and sends the last few turns as `history`
+(oldest first, at most 6). Field rules: see 5.18.
+
+```json
+{
+  "message": "Колко струва смяна на масло?",
+  "history": [
+    { "role": "USER", "content": "Hello" },
+    { "role": "ASSISTANT", "content": "Hi! How can I help?" }
+  ]
+}
+```
+
+Response `200 OK`:
+
+```json
+{ "reply": "Смяната на масло е от 80.00 EUR. За точна цена подайте заявка за INSPECTION." }
+```
+
+- The server builds the prompt. The model only sees the **active** catalog items (name, description,
+  `basePrice`, `estimatedHours`, up to 100 sorted by name) and the booking rules from 4.5.1. It never sees users,
+  vehicles, visits or invoices, so it cannot answer questions about a customer's own data.
+- Prices are given as approximate starting prices ("from X EUR"). For anything not in those facts the
+  assistant says it does not know and suggests an `INSPECTION` service request.
+- It answers in the language of `message` (Bulgarian or English).
+- The reply is plain text (it may contain line breaks or simple lists). Render it as text, not HTML.
+- Limits: **10 requests per 60 s per client IP** and **300 requests per day in total** (the day resets at
+  00:00 UTC). Both are configurable (`app.chat.rate-limit.*`, `app.chat.daily-limit`). A 429 has a
+  `Retry-After` header in seconds.
+- Message contents are not logged.
+
+Errors:
+
+| Status | When | `message` |
+|--------|------|-----------|
+| `400` | Field rules (5.18) | `"Validation failed"` + `fieldErrors` (e.g. `message`, `history`, `history[0].content`) |
+| `400` | Invalid JSON or unknown `role` (e.g. `"SYSTEM"`) | `"Malformed request body"` |
+| `429` | Too many requests from this IP | `"Too many chat requests. Please try again in a minute."` |
+| `429` | Daily limit for everyone reached | `"The assistant has reached its daily limit. Please try again tomorrow."` |
+| `503` | Cloudflare slow (timeout), unavailable, over its quota, returned no answer, or the chat is not configured | `"The assistant is temporarily unavailable. Please try again later."` |
+
 ---
 
 ## 5. Field rules (request DTOs)
@@ -835,6 +886,15 @@ same for "Unit sell price"). A part saved earlier with a price of 0 must get a p
 | `lastName` | string | yes | max 50 | |
 
 There is no `username` or `role` field; both are fixed at creation.
+
+### 5.18 ChatRequestDTO (`POST /api/chat`)
+
+| Field | Type | Required | Length | Other |
+|-------|------|----------|--------|-------|
+| `message` | string | yes | max 500 | |
+| `history` | array of `ChatMessageDTO` | no | max 6 entries | oldest first |
+| `history[].role` | enum | yes | — | `USER` or `ASSISTANT` |
+| `history[].content` | string | yes | max 1000 | |
 
 ---
 

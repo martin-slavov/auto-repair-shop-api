@@ -24,3 +24,16 @@ app.cors.allowed-origins=http://localhost:5173
 
 springdoc.api-docs.enabled=true
 springdoc.swagger-ui.enabled=true
+
+# Chatbot (Cloudflare Workers AI). Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN as environment variables.
+app.chat.cloudflare.account-id=${CLOUDFLARE_ACCOUNT_ID:}
+app.chat.cloudflare.api-token=${CLOUDFLARE_API_TOKEN:}
+app.chat.cloudflare.model=@cf/meta/llama-3.3-70b-instruct-fp8-fast
+app.chat.currency=EUR
+app.chat.connect-timeout=5s
+app.chat.read-timeout=20s
+app.chat.max-tokens=400
+app.chat.temperature=0.2
+app.chat.rate-limit.max-requests=10
+app.chat.rate-limit.window=60s
+app.chat.daily-limit=300

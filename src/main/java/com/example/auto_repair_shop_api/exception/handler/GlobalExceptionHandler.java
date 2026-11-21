@@ -2,10 +2,12 @@ package com.example.auto_repair_shop_api.exception.handler;
 
 import com.example.auto_repair_shop_api.dto.error.ErrorResponse;
 import com.example.auto_repair_shop_api.exception.BookingConflictException;
+import com.example.auto_repair_shop_api.exception.ChatUnavailableException;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
 import com.example.auto_repair_shop_api.exception.InvalidSortParameterException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
+import com.example.auto_repair_shop_api.exception.RateLimitExceededException;
 import com.example.auto_repair_shop_api.exception.ResourceInUseException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
 import jakarta.validation.ConstraintViolation;
@@ -15,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
@@ -76,6 +79,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidSortParameterException.class)
     public ResponseEntity<ErrorResponse> handleInvalidSort(InvalidSortParameterException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ErrorResponse> handleRateLimit(RateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getRetryAfterSeconds()))
+                .body(new ErrorResponse(HttpStatus.TOO_MANY_REQUESTS.value(), ex.getMessage(),
+                        LocalDateTime.now(), Map.of()));
+    }
+
+    @ExceptionHandler(ChatUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleChatUnavailable(ChatUnavailableException ex) {
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -15,7 +15,8 @@ public class ServiceRequestMapper {
                 request.getType().name(),
                 request.getCreatedAt(),
                 request.getVehicle().getLicensePlate(),
-                request.getPreferredDate()
+                request.getPreferredDate(),
+                request.getPreferredPeriod() != null ? request.getPreferredPeriod().name() : null
         );
     }
 }

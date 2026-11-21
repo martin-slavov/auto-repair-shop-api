@@ -4,6 +4,7 @@ import com.example.auto_repair_shop_api.dto.error.ErrorResponse;
 import com.example.auto_repair_shop_api.exception.BookingConflictException;
 import com.example.auto_repair_shop_api.exception.ChatUnavailableException;
 import com.example.auto_repair_shop_api.exception.DuplicateResourceException;
+import com.example.auto_repair_shop_api.exception.FieldValidationException;
 import com.example.auto_repair_shop_api.exception.InvalidSortParameterException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
@@ -126,6 +127,11 @@ public class GlobalExceptionHandler {
             fieldErrors.put(error.getField(), error.getDefaultMessage());
         }
         return build(HttpStatus.BAD_REQUEST, "Validation failed", fieldErrors);
+    }
+
+    @ExceptionHandler(FieldValidationException.class)
+    public ResponseEntity<ErrorResponse> handleFieldValidation(FieldValidationException ex) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), ex.getFieldErrors());
     }
 
     // Validation of @PathVariable / @RequestParam when the controller class is annotated with @Validated.

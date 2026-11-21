@@ -1,11 +1,13 @@
 package com.example.auto_repair_shop_api.service.impl;
 
+import com.example.auto_repair_shop_api.config.BookingProperties;
 import com.example.auto_repair_shop_api.dto.servicerequest.ApproveRequestDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestCreateDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestResponseDTO;
 import com.example.auto_repair_shop_api.dto.servicerequest.ServiceRequestUpdateDTO;
 import com.example.auto_repair_shop_api.dto.common.PageResponse;
 import com.example.auto_repair_shop_api.event.ServiceRequestCreatedEvent;
+import com.example.auto_repair_shop_api.exception.FieldValidationException;
 import com.example.auto_repair_shop_api.exception.InvalidStateTransitionException;
 import com.example.auto_repair_shop_api.exception.OwnershipViolationException;
 import com.example.auto_repair_shop_api.exception.ResourceNotFoundException;
@@ -13,6 +15,7 @@ import com.example.auto_repair_shop_api.mapper.ServiceRequestMapper;
 import com.example.auto_repair_shop_api.model.AppUser;
 import com.example.auto_repair_shop_api.model.ServiceRequest;
 import com.example.auto_repair_shop_api.model.Vehicle;
+import com.example.auto_repair_shop_api.model.enums.PreferredPeriod;
 import com.example.auto_repair_shop_api.model.enums.RequestStatus;
 import com.example.auto_repair_shop_api.model.enums.RequestType;
 import com.example.auto_repair_shop_api.model.enums.Role;
@@ -30,10 +33,14 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.hasStatus;
 import static com.example.auto_repair_shop_api.repository.specification.ServiceRequestSpecifications.hasType;
@@ -54,6 +61,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
             "createdAt", "createdAt"
     );
     private static final Sort DEFAULT_SORT = Sort.by(Sort.Direction.DESC, "createdAt");
+    private static final int MAX_PREFERRED_DAYS_AHEAD = 90;
 
     private final ServiceRequestRepository serviceRequestRepository;
     private final VehicleRepository vehicleRepository;
@@ -61,24 +69,32 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     private final ServiceVisitService serviceVisitService;
     private final ServiceRequestMapper serviceRequestMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final BookingProperties booking;
+    private final Clock clock;
 
     public ServiceRequestServiceImpl(ServiceRequestRepository serviceRequestRepository,
                                      VehicleRepository vehicleRepository,
                                      AppUserService appUserService,
                                      ServiceVisitService serviceVisitService,
                                      ServiceRequestMapper serviceRequestMapper,
-                                     ApplicationEventPublisher eventPublisher) {
+                                     ApplicationEventPublisher eventPublisher,
+                                     BookingProperties booking,
+                                     Clock clock) {
         this.serviceRequestRepository = serviceRequestRepository;
         this.vehicleRepository = vehicleRepository;
         this.appUserService = appUserService;
         this.serviceVisitService = serviceVisitService;
         this.serviceRequestMapper = serviceRequestMapper;
         this.eventPublisher = eventPublisher;
+        this.booking = booking;
+        this.clock = clock;
     }
 
     @Override
     @Transactional
     public ServiceRequestResponseDTO createRequest(ServiceRequestCreateDTO dto, String currentUsername) {
+
+        validatePreferredVisit(dto.preferredDate(), dto.preferredPeriod());
 
         AppUser appUser = appUserService.getByUsernameOrThrow(currentUsername);
 
@@ -92,6 +108,7 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
         ServiceRequest serviceRequest = new ServiceRequest();
         serviceRequest.setDescription(dto.description());
         serviceRequest.setPreferredDate(dto.preferredDate());
+        serviceRequest.setPreferredPeriod(resolvePeriod(dto.preferredDate(), dto.preferredPeriod()));
         serviceRequest.setStatus(RequestStatus.PENDING);
         serviceRequest.setType(dto.type() != null ? dto.type() : RequestType.SERVICE);
         serviceRequest.setVehicle(vehicle);
@@ -168,10 +185,13 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
     @Transactional
     public ServiceRequestResponseDTO updateRequest(Long requestId, ServiceRequestUpdateDTO dto, String currentUsername) {
 
+        validatePreferredVisit(dto.preferredDate(), dto.preferredPeriod());
+
         ServiceRequest serviceRequest = getEditableRequestOrThrow(requestId, currentUsername, "updated");
 
         serviceRequest.setDescription(dto.description());
         serviceRequest.setPreferredDate(dto.preferredDate());
+        serviceRequest.setPreferredPeriod(resolvePeriod(dto.preferredDate(), dto.preferredPeriod()));
         serviceRequest.setType(dto.type());
 
         ServiceRequest updatedRequest = serviceRequestRepository.save(serviceRequest);
@@ -184,6 +204,40 @@ public class ServiceRequestServiceImpl implements ServiceRequestService {
 
         ServiceRequest serviceRequest = getEditableRequestOrThrow(requestId, currentUsername, "deleted");
         serviceRequestRepository.delete(serviceRequest);
+    }
+
+    private void validatePreferredVisit(LocalDate preferredDate, PreferredPeriod preferredPeriod) {
+
+        Map<String, String> fieldErrors = new HashMap<>();
+
+        if (preferredDate == null) {
+            if (preferredPeriod != null) {
+                fieldErrors.put("preferredPeriod", "Preferred period requires a preferred date");
+            }
+        } else {
+            LocalDate today = LocalDate.now(clock);
+            if (preferredDate.isBefore(today)) {
+                fieldErrors.put("preferredDate", "Preferred date cannot be in the past");
+            } else if (preferredDate.isAfter(today.plusDays(MAX_PREFERRED_DAYS_AHEAD))) {
+                fieldErrors.put("preferredDate",
+                        "Preferred date must be at most " + MAX_PREFERRED_DAYS_AHEAD + " days ahead");
+            } else if (!booking.getWorkingDays().contains(preferredDate.getDayOfWeek())) {
+                fieldErrors.put("preferredDate", "Preferred date must be on a working day ("
+                        + booking.getWorkingDays().stream().sorted().map(DayOfWeek::name)
+                        .collect(Collectors.joining(", ")) + ")");
+            }
+        }
+
+        if (!fieldErrors.isEmpty()) {
+            throw new FieldValidationException(fieldErrors);
+        }
+    }
+
+    private PreferredPeriod resolvePeriod(LocalDate preferredDate, PreferredPeriod preferredPeriod) {
+        if (preferredDate == null) {
+            return null;
+        }
+        return preferredPeriod != null ? preferredPeriod : PreferredPeriod.ANY;
     }
 
     private ServiceRequest getEditableRequestOrThrow(Long requestId, String currentUsername, String action) {

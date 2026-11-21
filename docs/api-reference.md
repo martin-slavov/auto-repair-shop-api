@@ -382,8 +382,8 @@ Request body field rules are in section 5.
 | `UserAdminDTO` | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
 | `UserProfileDTO` (own profile) | `id`, `username`, `email`, `firstName`, `lastName`, `role`, `enabled` |
 | `VehicleResponseDTO` | `id`, `licensePlate`, `manufacturer`, `model`, `year`, `ownerId`, `ownerName` ("First Last"), `firstRegistrationDate` (nullable) |
-| `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable) |
-| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]`, `requestType` (`SERVICE` / `INSPECTION` / `CONSULTATION`), `requestDescription` (the work to do), `vehicleManufacturer`, `vehicleModel`, `myRole` (the calling mechanic's role in the visit, `LEAD` / `ASSISTANT`; `null` for ADMIN and CUSTOMER). `requestType` and `requestDescription` come from the service request the visit was created from and are `null` if the visit has no linked request |
+| `ServiceRequestResponseDTO` | `id`, `description`, `status`, `type`, `createdAt`, `licensePlate`, `preferredDate` (nullable), `preferredPeriod` (`MORNING` / `AFTERNOON` / `ANY`; `null` when there is no preferred date) |
+| `ServiceVisitResponseDTO` | `id`, `status`, `scheduledDate`, `completedDate` (nullable), `technicalNotes` (nullable), `licensePlate`, `mechanics[]`, `requestType` (`SERVICE` / `INSPECTION` / `CONSULTATION`), `requestDescription` (the work to do), `vehicleManufacturer`, `vehicleModel`, `myRole` (the calling mechanic's role in the visit, `LEAD` / `ASSISTANT`; `null` for ADMIN and CUSTOMER), `preferredDate` (nullable), `preferredPeriod` (nullable). `requestType`, `requestDescription`, `preferredDate` and `preferredPeriod` come from the service request the visit was created from and are `null` if the visit has no linked request |
 | `MechanicAssignmentDTO` (in `mechanics[]`) | `mechanicName` ("First Last"), `roleInVisit` (`LEAD` / `ASSISTANT`), `hoursWorked` (`0.00` until the visit is completed), `mechanicId` (the mechanic's user id; **ADMIN only**, `null` for MECHANIC and CUSTOMER), `assignmentId` (id of this assignment; ADMIN and mechanics assigned to the visit, `null` for CUSTOMER) |
 | `VisitPartResponseDTO` | `id` (= part line id), `partName`, `quantity`, `priceAtTimeOfUse` (**line total** = unit price × quantity), `addedAt` |
 | `PartResponseDTO` (admin) | `id`, `name`, `serialNumber`, `unitCost`, `unitSellPrice`, `active` |
@@ -440,6 +440,9 @@ Admins cannot create vehicles (POST is CUSTOMER only).
 | PATCH | `/api/service-requests/{id}/reject` | ADMIN | — | 200 | `ServiceRequestResponseDTO` (status `REJECTED`) |
 
 After a request is created, an email notification goes to the shop asynchronously. This does not affect the response.
+
+`preferredDate` / `preferredPeriod` are only information for the admin. Approve does not check them: the admin
+still picks any valid `mechanicId` and `scheduledDate`.
 
 ### 4.5 Service visits
 
@@ -762,16 +765,30 @@ is the value for `maxLength`. `@Digits(i, f)` = at most `i` digits before and `f
 |-------|------|----------|--------|-------|
 | `vehicleId` | long | yes | — | must be the caller's vehicle (403); unknown → 404 |
 | `description` | string | yes | max 500 | |
-| `preferredDate` | date | no | — | today or later |
+| `preferredDate` | date | no | — | see the preferred date rules below |
 | `type` | enum | no | — | `SERVICE` (default), `INSPECTION`, `CONSULTATION` |
+| `preferredPeriod` | enum | no | — | `MORNING`, `AFTERNOON`, `ANY`. Requires `preferredDate`; defaults to `ANY` when a date is given |
+
+Preferred date rules (create and update). Each error is 400 `"Validation failed"` with the message in `fieldErrors`:
+
+| Case | Field | Message |
+|------|-------|---------|
+| before today | `preferredDate` | `"Preferred date cannot be in the past"` |
+| more than 90 days after today | `preferredDate` | `"Preferred date must be at most 90 days ahead"` |
+| not a working day | `preferredDate` | `"Preferred date must be on a working day (MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY)"` |
+| `preferredPeriod` sent without `preferredDate` | `preferredPeriod` | `"Preferred period requires a preferred date"` |
+
+An unknown `preferredPeriod` value gives 400 `"Malformed request body"`. Requests created before this field
+existed keep `preferredPeriod: null` if they had no preferred date, and `ANY` if they had one.
 
 ### 5.7 ServiceRequestUpdateDTO
 
 | Field | Type | Required | Length | Other |
 |-------|------|----------|--------|-------|
 | `description` | string | yes | max 500 | |
-| `preferredDate` | date | no | — | today or later. **Sending null or omitting it clears the stored date.** |
+| `preferredDate` | date | no | — | same rules as 5.6. **Sending null or omitting it clears the stored date and period.** |
 | `type` | enum | **yes** | — | `SERVICE`, `INSPECTION`, `CONSULTATION` |
+| `preferredPeriod` | enum | no | — | same rules as 5.6 (defaults to `ANY` when a date is given) |
 
 The vehicle of a request cannot be changed.
 
@@ -981,7 +998,8 @@ There is no `username` or `role` field; both are fixed at creation.
   Send the slot's `start` unchanged as `scheduledDate`. See 4.5.1.
 - **Approve response**: `/approve` returns the request, not the new visit. Reload the visit list to get it.
   Responses do not include the ids of linked records (only `licensePlate`), apart from the exceptions in 4.0.
-- **Service request update** replaces `preferredDate`. Always send the current value, or it is cleared.
+- **Service request update** replaces `preferredDate` and `preferredPeriod`. Always send the current values, or
+  they are cleared (a date without a period becomes `ANY`).
 - **License plates** are stored without spaces and in upper case. `maxLength` 8 applies after removing spaces.
 - **CORS**: only origins listed in `APP_CORS_ALLOWED_ORIGINS` (property `app.cors.allowed-origins`,
   comma-separated) are allowed. If it is empty, no cross-origin call is allowed. Allowed methods: `GET, POST,

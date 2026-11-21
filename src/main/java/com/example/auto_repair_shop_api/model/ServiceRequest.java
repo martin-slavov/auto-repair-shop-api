@@ -1,5 +1,6 @@
 package com.example.auto_repair_shop_api.model;
 
+import com.example.auto_repair_shop_api.model.enums.PreferredPeriod;
 import com.example.auto_repair_shop_api.model.enums.RequestStatus;
 import com.example.auto_repair_shop_api.model.enums.RequestType;
 import jakarta.persistence.*;
@@ -34,6 +35,10 @@ public class ServiceRequest {
 
     @Column(name = "preferred_date")
     private LocalDate preferredDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "preferred_period")
+    private PreferredPeriod preferredPeriod;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "vehicle_id", nullable = false)
@@ -90,6 +95,14 @@ public class ServiceRequest {
         this.preferredDate = preferredDate;
     }
 
+    public PreferredPeriod getPreferredPeriod() {
+        return preferredPeriod;
+    }
+
+    public void setPreferredPeriod(PreferredPeriod preferredPeriod) {
+        this.preferredPeriod = preferredPeriod;
+    }
+
     public Vehicle getVehicle() {
         return vehicle;
     }
@@ -107,6 +120,7 @@ public class ServiceRequest {
                 ", type=" + type +
                 ", createdAt=" + createdAt +
                 ", preferredDate=" + preferredDate +
+                ", preferredPeriod=" + preferredPeriod +
                 '}';
     }
 }

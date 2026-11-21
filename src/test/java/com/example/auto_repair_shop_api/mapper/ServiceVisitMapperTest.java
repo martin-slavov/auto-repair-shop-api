@@ -8,6 +8,7 @@ import com.example.auto_repair_shop_api.model.ServiceVisit;
 import com.example.auto_repair_shop_api.model.Vehicle;
 import com.example.auto_repair_shop_api.model.VisitAssignment;
 import com.example.auto_repair_shop_api.model.enums.AssignmentRole;
+import com.example.auto_repair_shop_api.model.enums.PreferredPeriod;
 import com.example.auto_repair_shop_api.model.enums.RequestType;
 import com.example.auto_repair_shop_api.model.enums.Role;
 import com.example.auto_repair_shop_api.model.enums.VisitStatus;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -44,6 +46,8 @@ class ServiceVisitMapperTest {
         request.setType(RequestType.INSPECTION);
         request.setDescription("Brakes squeak when stopping");
         request.setVehicle(vehicle);
+        request.setPreferredDate(LocalDate.of(2026, 11, 23));
+        request.setPreferredPeriod(PreferredPeriod.MORNING);
 
         visit = new ServiceVisit();
         visit.setId(12L);
@@ -101,7 +105,19 @@ class ServiceVisitMapperTest {
         assertThat(result).isEqualTo(new ServiceVisitResponseDTO(
                 12L, "SCHEDULED", LocalDateTime.of(2026, 11, 23, 10, 0), null, null, "CA1234AB",
                 List.of(new MechanicAssignmentDTO("Ivan Petrov", "LEAD", new BigDecimal("0.00"), null, null)),
-                "INSPECTION", "Brakes squeak when stopping", "Toyota", "Corolla", null));
+                "INSPECTION", "Brakes squeak when stopping", "Toyota", "Corolla", null,
+                LocalDate.of(2026, 11, 23), "MORNING"));
+    }
+
+    @Test
+    void returnsNullPreferredFieldsWhenTheRequestHasNoPreferredDate() {
+        visit.getServiceRequest().setPreferredDate(null);
+        visit.getServiceRequest().setPreferredPeriod(null);
+
+        ServiceVisitResponseDTO result = mapper.toResponseDto(visit, lead, VisitViewer.ADMIN);
+
+        assertThat(result.preferredDate()).isNull();
+        assertThat(result.preferredPeriod()).isNull();
     }
 
     @Test
@@ -112,6 +128,8 @@ class ServiceVisitMapperTest {
 
         assertThat(result.requestType()).isNull();
         assertThat(result.requestDescription()).isNull();
+        assertThat(result.preferredDate()).isNull();
+        assertThat(result.preferredPeriod()).isNull();
         assertThat(result.vehicleManufacturer()).isEqualTo("Toyota");
         assertThat(result.vehicleModel()).isEqualTo("Corolla");
         assertThat(result.licensePlate()).isEqualTo("CA1234AB");

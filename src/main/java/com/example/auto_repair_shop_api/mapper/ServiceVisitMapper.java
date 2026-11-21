@@ -52,7 +52,9 @@ public class ServiceVisitMapper {
                 request != null ? request.getDescription() : null,
                 vehicle.getManufacturer(),
                 vehicle.getModel(),
-                myRole
+                myRole,
+                request != null ? request.getPreferredDate() : null,
+                request != null && request.getPreferredPeriod() != null ? request.getPreferredPeriod().name() : null
         );
     }
 }
